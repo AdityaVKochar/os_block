@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .auditd import parse_syscall_line
 from .service import AuditService
+from .witness import WitnessStore, replicate_checkpoint, serve_witness
 
 
 def _service(args: argparse.Namespace) -> AuditService:
@@ -30,6 +31,16 @@ def main() -> None:
     sub.add_parser("verify")
     proof = sub.add_parser("proof")
     proof.add_argument("--sequence", type=int, required=True)
+    replicate = sub.add_parser("replicate")
+    replicate.add_argument("--url", required=True, help="witness base URL, e.g. http://127.0.0.1:8080")
+    witness_trust = sub.add_parser("witness-trust")
+    witness_trust.add_argument("--witness-dir", required=True)
+    witness_trust.add_argument("--public-key", required=True)
+    witness_trust.add_argument("--trusted-signer-id", required=True)
+    witness_serve = sub.add_parser("witness-serve")
+    witness_serve.add_argument("--witness-dir", required=True)
+    witness_serve.add_argument("--host", default="127.0.0.1")
+    witness_serve.add_argument("--port", type=int, default=8080)
     sub.add_parser("demo")
     args = parser.parse_args()
     service = _service(args)
@@ -69,6 +80,15 @@ def main() -> None:
         print(json.dumps(service.verify(), indent=2))
     elif args.command == "proof":
         print(json.dumps(service.inclusion_proof(args.sequence), indent=2))
+    elif args.command == "replicate":
+        results = [replicate_checkpoint(args.url, checkpoint) for checkpoint in service.checkpoints()]
+        print(json.dumps({"replicated": len(results), "results": results}, indent=2))
+    elif args.command == "witness-trust":
+        store = WitnessStore(Path(args.witness_dir))
+        destination = store.trust_signer(args.trusted_signer_id, Path(args.public_key))
+        print(json.dumps({"trusted_key": str(destination)}))
+    elif args.command == "witness-serve":
+        serve_witness(Path(args.witness_dir), args.host, args.port)
     elif args.command == "demo":
         events = [
             {"timestamp": "2026-09-11T10:00:00Z", "pid": 100, "ppid": 1, "uid": 1000, "syscall": "execve", "process": "/usr/bin/python3", "arguments": {"path": "/usr/bin/python3"}, "return_code": 0},

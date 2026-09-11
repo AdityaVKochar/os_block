@@ -63,6 +63,10 @@ class AuditService:
             "checkpoint": checkpoint.to_dict(),
         }
 
+    def checkpoints(self) -> list[Checkpoint]:
+        """Expose committed blocks for replication without raw event records."""
+        return list(self.store.checkpoints())
+
     def commit_pending_batch(self) -> Checkpoint | None:
         self.initialize()
         events = list(self.store.events())

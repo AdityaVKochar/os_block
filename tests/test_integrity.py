@@ -8,6 +8,7 @@ from pathlib import Path
 from bscaf.merkle import inclusion_proof, merkle_root, verify_inclusion
 from bscaf.auditd import parse_syscall_line
 from bscaf.policy import AuditPolicy
+from bscaf.witness import WitnessStore
 from bscaf.service import AuditService
 
 
@@ -79,6 +80,20 @@ class IntegrityTests(unittest.TestCase):
             proof = service.inclusion_proof(1)
             packed = [(item["side"], item["hash"]) for item in proof["proof"]]
             self.assertTrue(verify_inclusion(proof["leaf_hash"], packed, proof["checkpoint"]["merkle_root"]))
+
+    def test_witness_accepts_only_trusted_signed_checkpoint(self):
+        with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as witness_dir:
+            source = AuditService(Path(source_dir), batch_size=2, signer_id="source-host")
+            source.ingest(event(1))
+            source.ingest(event(2))
+            checkpoint = source.checkpoints()[0]
+            witness = WitnessStore(Path(witness_dir))
+            witness.trust_signer("source-host", source.store.public_key_path)
+            self.assertTrue(witness.accept(checkpoint.to_dict())["accepted"])
+            altered = checkpoint.to_dict()
+            altered["merkle_root"] = "f" * 64
+            with self.assertRaisesRegex(ValueError, "block hash"):
+                witness.accept(altered)
 
 
 if __name__ == "__main__":
