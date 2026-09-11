@@ -1,0 +1,1 @@
+type=SYSCALL msg=audit(1726048800.250:19): arch=c000003e syscall=59 success=yes exit=0 a0=0 a1=0 a2=0 a3=0 pid=732 ppid=1 uid=1000 exe="/usr/bin/id"

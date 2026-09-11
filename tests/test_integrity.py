@@ -9,6 +9,7 @@ from bscaf.merkle import inclusion_proof, merkle_root, verify_inclusion
 from bscaf.auditd import parse_syscall_line
 from bscaf.policy import AuditPolicy
 from bscaf.witness import WitnessStore
+from bscaf.proof import verify_exported_proof
 from bscaf.service import AuditService
 
 
@@ -94,6 +95,14 @@ class IntegrityTests(unittest.TestCase):
             altered["merkle_root"] = "f" * 64
             with self.assertRaisesRegex(ValueError, "block hash"):
                 witness.accept(altered)
+
+    def test_exported_proof_verifies_offline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            service = AuditService(Path(directory), batch_size=2)
+            service.ingest(event(1))
+            service.ingest(event(2))
+            result = verify_exported_proof(service.inclusion_proof(1), service.store.public_key_path)
+            self.assertTrue(result["valid"])
 
 
 if __name__ == "__main__":

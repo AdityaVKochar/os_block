@@ -1,0 +1,3 @@
+{"timestamp":"2026-09-11T10:00:00Z","host_id":"demo-host","pid":214,"ppid":1,"uid":1000,"syscall":"execve","process":"/usr/bin/curl","arguments":{"path":"/usr/bin/curl"},"return_code":0}
+{"timestamp":"2026-09-11T10:00:01Z","host_id":"demo-host","pid":214,"ppid":1,"uid":1000,"syscall":"openat","process":"/usr/bin/curl","arguments":{"path":"/etc/hosts"},"return_code":3}
+{"timestamp":"2026-09-11T10:00:02Z","host_id":"demo-host","pid":214,"ppid":1,"uid":1000,"syscall":"connect","process":"/usr/bin/curl","arguments":{"destination":"127.0.0.1:443","token":"do-not-store-me"},"return_code":0}

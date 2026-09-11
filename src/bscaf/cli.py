@@ -9,6 +9,7 @@ from pathlib import Path
 from .auditd import parse_syscall_line
 from .service import AuditService
 from .witness import WitnessStore, replicate_checkpoint, serve_witness
+from .proof import verify_exported_proof
 
 
 def _service(args: argparse.Namespace) -> AuditService:
@@ -31,6 +32,10 @@ def main() -> None:
     sub.add_parser("verify")
     proof = sub.add_parser("proof")
     proof.add_argument("--sequence", type=int, required=True)
+    proof_verify = sub.add_parser("proof-verify")
+    proof_verify.add_argument("--input", required=True, help="proof JSON exported by the proof command")
+    proof_verify.add_argument("--public-key", required=True, help="trusted source Ed25519 public key")
+    sub.add_parser("status")
     replicate = sub.add_parser("replicate")
     replicate.add_argument("--url", required=True, help="witness base URL, e.g. http://127.0.0.1:8080")
     witness_trust = sub.add_parser("witness-trust")
@@ -80,6 +85,12 @@ def main() -> None:
         print(json.dumps(service.verify(), indent=2))
     elif args.command == "proof":
         print(json.dumps(service.inclusion_proof(args.sequence), indent=2))
+    elif args.command == "proof-verify":
+        payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
+        print(json.dumps(verify_exported_proof(payload, Path(args.public_key)), indent=2))
+    elif args.command == "status":
+        report = service.verify()
+        print(json.dumps({"data_dir": str(Path(args.data_dir)), **report}, indent=2))
     elif args.command == "replicate":
         results = [replicate_checkpoint(args.url, checkpoint) for checkpoint in service.checkpoints()]
         print(json.dumps({"replicated": len(results), "results": results}, indent=2))
