@@ -11,31 +11,57 @@ from .canonical import canonical_json
 from .crypto import create_keypair, sign, verify
 from .merkle import merkle_root
 from .models import GENESIS_HASH, AuditEvent, Checkpoint
+from .policy import AuditPolicy
 from .store import AuditStore
 
 
 class AuditService:
-    def __init__(self, data_dir: Path, batch_size: int = 10, signer_id: str = "local-witness"):
+    def __init__(self, data_dir: Path, batch_size: int = 10, signer_id: str = "local-witness", policy: AuditPolicy | None = None):
         if batch_size < 1:
             raise ValueError("batch_size must be at least 1")
         self.store = AuditStore(data_dir)
         self.batch_size = batch_size
         self.signer_id = signer_id
+        self.policy = policy or AuditPolicy()
 
     def initialize(self) -> None:
         self.store.initialize()
         if not self.store.private_key_path.exists() or not self.store.public_key_path.exists():
             create_keypair(self.store.private_key_path, self.store.public_key_path)
 
-    def ingest(self, payload: dict[str, Any]) -> AuditEvent:
+    def ingest(self, payload: dict[str, Any]) -> AuditEvent | None:
         self.initialize()
+        minimized = self.policy.apply(payload)
+        if minimized is None:
+            return None
         events = list(self.store.events())
         previous_hash = events[-1].event_hash if events else GENESIS_HASH
-        event = AuditEvent.from_input(payload, len(events) + 1, previous_hash)
+        event = AuditEvent.from_input(minimized, len(events) + 1, previous_hash)
         self.store.append_event(event)
         if len(events) % self.batch_size == self.batch_size - 1:
             self.commit_pending_batch()
         return event
+
+    def inclusion_proof(self, sequence: int) -> dict[str, Any]:
+        """Return a portable Merkle inclusion proof for one committed event."""
+        from .merkle import inclusion_proof
+
+        events = list(self.store.events())
+        checkpoints = list(self.store.checkpoints())
+        event = next((item for item in events if item.sequence == sequence), None)
+        if event is None:
+            raise ValueError(f"event sequence {sequence} does not exist")
+        checkpoint = next((item for item in checkpoints if item.first_sequence <= sequence <= item.last_sequence), None)
+        if checkpoint is None:
+            raise ValueError(f"event sequence {sequence} has not been checkpointed")
+        batch = [item for item in events if checkpoint.first_sequence <= item.sequence <= checkpoint.last_sequence]
+        index = sequence - checkpoint.first_sequence
+        return {
+            "event": event.to_dict(),
+            "leaf_hash": event.event_hash,
+            "proof": [{"side": side, "hash": sibling} for side, sibling in inclusion_proof([item.event_hash for item in batch], index)],
+            "checkpoint": checkpoint.to_dict(),
+        }
 
     def commit_pending_batch(self) -> Checkpoint | None:
         self.initialize()

@@ -6,6 +6,8 @@ import unittest
 from pathlib import Path
 
 from bscaf.merkle import inclusion_proof, merkle_root, verify_inclusion
+from bscaf.auditd import parse_syscall_line
+from bscaf.policy import AuditPolicy
 from bscaf.service import AuditService
 
 
@@ -55,6 +57,28 @@ class IntegrityTests(unittest.TestCase):
             report = service.verify()
             self.assertFalse(report["valid"])
             self.assertGreaterEqual({item["type"] for item in report["problems"]}, {"event-hash", "merkle-root"})
+
+    def test_policy_redacts_and_filters_events(self):
+        policy = AuditPolicy(allowed_syscalls=frozenset({"execve"}))
+        accepted = policy.apply({**event(1), "syscall": "execve", "arguments": {"token": "very-secret", "path": "/usr/bin/id"}})
+        self.assertEqual(accepted["arguments"]["token"], "[REDACTED]")
+        self.assertIsNone(policy.apply(event(1)))
+
+    def test_auditd_adapter_parses_syscall_record(self):
+        line = 'type=SYSCALL msg=audit(1726048800.250:19): arch=c000003e syscall=59 success=yes exit=0 a0=0 a1=0 a2=0 a3=0 pid=732 ppid=1 uid=1000 exe="/usr/bin/id"'
+        parsed = parse_syscall_line(line, host_id="lab-host")
+        self.assertEqual(parsed["syscall"], "execve")
+        self.assertEqual(parsed["host_id"], "lab-host")
+        self.assertEqual(parsed["process"], "/usr/bin/id")
+
+    def test_inclusion_proof_is_returned_for_committed_event(self):
+        with tempfile.TemporaryDirectory() as directory:
+            service = AuditService(Path(directory), batch_size=2)
+            service.ingest(event(1))
+            service.ingest(event(2))
+            proof = service.inclusion_proof(1)
+            packed = [(item["side"], item["hash"]) for item in proof["proof"]]
+            self.assertTrue(verify_inclusion(proof["leaf_hash"], packed, proof["checkpoint"]["merkle_root"]))
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .auditd import parse_syscall_line
 from .service import AuditService
 
 
@@ -22,8 +23,13 @@ def main() -> None:
     sub.add_parser("init")
     ingest = sub.add_parser("ingest")
     ingest.add_argument("--input", required=True, help="newline-delimited JSON event file")
+    auditd = sub.add_parser("ingest-auditd")
+    auditd.add_argument("--input", required=True, help="raw auditd log file containing SYSCALL records")
+    auditd.add_argument("--host-id", default="localhost")
     sub.add_parser("flush")
     sub.add_parser("verify")
+    proof = sub.add_parser("proof")
+    proof.add_argument("--sequence", type=int, required=True)
     sub.add_parser("demo")
     args = parser.parse_args()
     service = _service(args)
@@ -36,16 +42,33 @@ def main() -> None:
         for number, line in enumerate(Path(args.input).read_text(encoding="utf-8").splitlines(), start=1):
             if line.strip():
                 try:
-                    service.ingest(json.loads(line))
-                    count += 1
+                    if service.ingest(json.loads(line)) is not None:
+                        count += 1
                 except (json.JSONDecodeError, ValueError) as error:
                     parser.error(f"input line {number}: {error}")
         print(json.dumps({"ingested": count}))
+    elif args.command == "ingest-auditd":
+        accepted = 0
+        ignored = 0
+        for number, line in enumerate(Path(args.input).read_text(encoding="utf-8").splitlines(), start=1):
+            try:
+                event = parse_syscall_line(line, host_id=args.host_id)
+                if event is None:
+                    ignored += 1
+                elif service.ingest(event) is None:
+                    ignored += 1
+                else:
+                    accepted += 1
+            except ValueError as error:
+                parser.error(f"audit log line {number}: {error}")
+        print(json.dumps({"ingested": accepted, "ignored": ignored}))
     elif args.command == "flush":
         block = service.flush()
         print(json.dumps({"checkpoint": None if block is None else block.to_dict()}, indent=2))
     elif args.command == "verify":
         print(json.dumps(service.verify(), indent=2))
+    elif args.command == "proof":
+        print(json.dumps(service.inclusion_proof(args.sequence), indent=2))
     elif args.command == "demo":
         events = [
             {"timestamp": "2026-09-11T10:00:00Z", "pid": 100, "ppid": 1, "uid": 1000, "syscall": "execve", "process": "/usr/bin/python3", "arguments": {"path": "/usr/bin/python3"}, "return_code": 0},
