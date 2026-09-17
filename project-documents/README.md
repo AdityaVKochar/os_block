@@ -21,4 +21,4 @@ python .\project-documents\builders\build_formal_draft.py
 
 Supporting diagram files are stored under `assets/`. Temporary rendering output belongs under `render-output/` and is excluded from Git.
 
-The `archive/pre-reorganization/` directory preserves the earlier binary copies that were previously stored at the repository root. They are retained only for comparison and recovery; the current generated documents are the files at the top of `project-documents/`.
+The `archive/` directory preserves the earlier binary copies that were previously stored at the repository root. `archive/original-brief/` contains the exact original brief, while `archive/pre-reorganization/` contains the earlier formal draft and native-shape diagram. They are retained only for comparison and recovery; the current generated documents are the files at the top of `project-documents/`.
