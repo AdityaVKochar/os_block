@@ -11,8 +11,8 @@ from docx.oxml.ns import nsdecls
 from docx.shared import Inches
 
 
-ROOT = Path(r"D:\projects\os_block")
-OUTPUT = ROOT / "B-SCAF_Architecture_Native_Shapes.docx"
+DOCUMENTS_DIR = Path(__file__).resolve().parents[1]
+OUTPUT = DOCUMENTS_DIR / "B-SCAF_Architecture_Native_Shapes.docx"
 
 
 def text_runs(text: str, size: int = 20, bold: bool = True) -> str:

@@ -8,9 +8,9 @@ from docx.enum.section import WD_SECTION
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
-ROOT = Path(r"C:\Users\adity\Documents\OS project")
-SOURCE = ROOT / "Blockchain_System_Call_Audit_Framework.txt"
-OUTPUT = ROOT / "Blockchain_System_Call_Audit_Framework.docx"
+DOCUMENTS_DIR = Path(__file__).resolve().parents[1]
+SOURCE = DOCUMENTS_DIR / "Blockchain_System_Call_Audit_Framework.txt"
+OUTPUT = DOCUMENTS_DIR / "Blockchain_System_Call_Audit_Framework.docx"
 
 
 def set_run_font(run, size=None, bold=None):

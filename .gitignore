@@ -3,4 +3,6 @@ __pycache__/
 .pytest_cache/
 .test-temp/
 audit-data*/
-docx_render/
+project-documents/render-output/
+/*.docx
+~$*.docx

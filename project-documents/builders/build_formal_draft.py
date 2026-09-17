@@ -14,11 +14,11 @@ from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
 
-ROOT = Path(r"D:\projects\os_block")
-SOURCE = ROOT / "Blockchain_System_Call_Audit_Framework.txt"
-ASSET_DIR = ROOT / "docs" / "assets"
+DOCUMENTS_DIR = Path(__file__).resolve().parents[1]
+SOURCE = DOCUMENTS_DIR / "Blockchain_System_Call_Audit_Framework.txt"
+ASSET_DIR = DOCUMENTS_DIR / "assets"
 DIAGRAM = ASSET_DIR / "bscaf-architecture.png"
-OUTPUT = ROOT / "Blockchain_System_Call_Audit_Framework_Formal_Draft.docx"
+OUTPUT = DOCUMENTS_DIR / "Blockchain_System_Call_Audit_Framework_Formal_Draft.docx"
 BLACK = RGBColor(0, 0, 0)
 
 
