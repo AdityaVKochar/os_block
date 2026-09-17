@@ -1,5 +1,6 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.test-temp/
 audit-data*/
 docx_render/

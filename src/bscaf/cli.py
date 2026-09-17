@@ -10,6 +10,7 @@ from .auditd import parse_syscall_line
 from .service import AuditService
 from .witness import WitnessStore, replicate_checkpoint, serve_witness
 from .proof import verify_exported_proof
+from .ui import serve_ui
 
 
 def _service(args: argparse.Namespace) -> AuditService:
@@ -46,6 +47,10 @@ def main() -> None:
     witness_serve.add_argument("--witness-dir", required=True)
     witness_serve.add_argument("--host", default="127.0.0.1")
     witness_serve.add_argument("--port", type=int, default=8080)
+    ui = sub.add_parser("ui", help="run the minimal local audit dashboard")
+    ui.add_argument("--host", default="127.0.0.1")
+    ui.add_argument("--port", type=int, default=8000)
+    ui.add_argument("--no-browser", action="store_true", help="do not open the dashboard automatically")
     sub.add_parser("demo")
     args = parser.parse_args()
     service = _service(args)
@@ -100,6 +105,8 @@ def main() -> None:
         print(json.dumps({"trusted_key": str(destination)}))
     elif args.command == "witness-serve":
         serve_witness(Path(args.witness_dir), args.host, args.port)
+    elif args.command == "ui":
+        serve_ui(service, args.host, args.port, open_browser=not args.no_browser)
     elif args.command == "demo":
         events = [
             {"timestamp": "2026-09-11T10:00:00Z", "pid": 100, "ppid": 1, "uid": 1000, "syscall": "execve", "process": "/usr/bin/python3", "arguments": {"path": "/usr/bin/python3"}, "return_code": 0},

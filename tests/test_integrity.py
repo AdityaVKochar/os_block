@@ -10,6 +10,12 @@ from bscaf.auditd import parse_syscall_line
 from bscaf.policy import AuditPolicy
 from bscaf.witness import WitnessStore
 from bscaf.proof import verify_exported_proof
+from bscaf.ui import DASHBOARD_HTML, DashboardController
+
+
+TEST_TEMP_ROOT = Path(__file__).resolve().parents[1] / ".test-temp"
+TEST_TEMP_ROOT.mkdir(exist_ok=True)
+tempfile.tempdir = str(TEST_TEMP_ROOT)
 from bscaf.service import AuditService
 
 
@@ -103,6 +109,18 @@ class IntegrityTests(unittest.TestCase):
             service.ingest(event(2))
             result = verify_exported_proof(service.inclusion_proof(1), service.store.public_key_path)
             self.assertTrue(result["valid"])
+
+    def test_ui_controller_builds_valid_black_and_white_dashboard(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller = DashboardController(AuditService(Path(directory), batch_size=2))
+            result = controller.add_demo_events()
+            dashboard = controller.dashboard()
+            self.assertIn("Added 3 demo events", result["message"])
+            self.assertTrue(dashboard["report"]["valid"])
+            self.assertEqual(len(dashboard["events"]), 3)
+            self.assertEqual(len(dashboard["checkpoints"]), 2)
+            self.assertIn("background:var(--paper)", DASHBOARD_HTML)
+            self.assertNotIn("https://", DASHBOARD_HTML)
 
 
 if __name__ == "__main__":

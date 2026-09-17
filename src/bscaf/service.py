@@ -67,6 +67,10 @@ class AuditService:
         """Expose committed blocks for replication without raw event records."""
         return list(self.store.checkpoints())
 
+    def events(self) -> list[AuditEvent]:
+        """Return normalized events for local audit and demonstration views."""
+        return list(self.store.events())
+
     def commit_pending_batch(self) -> Checkpoint | None:
         self.initialize()
         events = list(self.store.events())

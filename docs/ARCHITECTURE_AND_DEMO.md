@@ -207,7 +207,17 @@ Ran 8 tests in 0.065s
 OK
 ```
 
-## 11. Security boundaries and future work
+## 11. Minimal web dashboard
+
+Run the dependency-free black-and-white demonstration interface:
+
+```powershell
+& $py -m bscaf.cli --data-dir .\audit-data-ui --batch-size 2 ui
+```
+
+The browser opens at `http://127.0.0.1:8000`. Select **Add demo events** to populate the ledger, then use **Verify integrity** to present the validation result. The interface shows recent system calls and signed checkpoints without changing the underlying command-line workflow.
+
+## 12. Security boundaries and future work
 
 B-SCAF detects post-commit modification when its checkpoint ledger and trusted public keys remain available. It does not prove that a fully compromised operating-system kernel did not fabricate events before collection.
 

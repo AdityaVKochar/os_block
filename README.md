@@ -68,6 +68,19 @@ On the source machine, replicate signed checkpoint blocks only:
 
 The witness never receives raw events. It rejects unknown signers, modified blocks and invalid signatures.
 
+## Minimal demonstration UI
+
+Start the local black-and-white dashboard:
+
+```powershell
+$env:PYTHONPATH = "src"
+& $py -m bscaf.cli --data-dir .\audit-data-ui --batch-size 2 ui
+```
+
+The browser opens at `http://127.0.0.1:8000`. Use **Add demo events** to create and commit a three-event audit trail. The dashboard then displays the integrity verdict, event count, checkpoint count, problems, recent system calls, and checkpoint hashes. Use **Verify integrity** to rerun all chain, Merkle-root, block-link, and signature checks.
+
+The UI uses only Python's standard-library HTTP server and embedded HTML/CSS/JavaScript; it introduces no web-framework or frontend dependency. It binds to localhost by default and is intended for demonstration. Use `--no-browser` on a headless Linux machine.
+
 ## Command summary
 
 | Command | Purpose |
@@ -78,6 +91,7 @@ The witness never receives raw events. It rejects unknown signers, modified bloc
 | `verify` / `status` | Verify event links, batch roots, block links and signatures. |
 | `proof` / `proof-verify` | Export and independently verify one committed event's proof. |
 | `witness-trust`, `witness-serve`, `replicate` | Set up and use a permissioned checkpoint witness. |
+| `ui` | Run the minimal local integrity dashboard. |
 
 ## Security scope
 
