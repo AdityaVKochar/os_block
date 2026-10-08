@@ -160,6 +160,15 @@ def main() -> None:
     ui.add_argument("--port", type=int, default=8000)
     ui.add_argument("--no-browser", action="store_true", help="do not open the dashboard automatically")
     sub.add_parser("demo")
+    bench = sub.add_parser("bench", help="compare plain logging, hash chain only and B-SCAF")
+    bench.add_argument("--events", type=int, default=100_000)
+    bench.add_argument("--source", choices=("real", "synthetic"), default="real")
+    bench.add_argument("--dataset-dir", default="datasets/raw")
+    bench.add_argument("--batch-sizes", default="10,100,1000")
+    bench.add_argument("--batch-seconds", type=float, default=0.05, help="also run a time-batched configuration")
+    bench.add_argument("--fsync", action="store_true", help="add durable (fsync) configurations")
+    bench.add_argument("--witnesses", type=int, default=3, help="replicate the N=100 run to this many local witnesses")
+    bench.add_argument("--out", default="results")
     args = parser.parse_args()
     try:
         service = _service(args)
@@ -225,6 +234,10 @@ def main() -> None:
         serve_witness(Path(args.witness_dir), args.host, args.port)
     elif args.command == "ui":
         serve_ui(service, args.host, args.port, open_browser=not args.no_browser)
+    elif args.command == "bench":
+        from .bench import results_markdown, run_cli
+
+        print(results_markdown(run_cli(args)["results"]))
     elif args.command == "demo":
         events = [
             {"timestamp": "2026-09-11T10:00:00Z", "pid": 100, "ppid": 1, "uid": 1000, "syscall": "execve", "process": "/usr/bin/python3", "arguments": {"path": "/usr/bin/python3"}, "return_code": 0},
