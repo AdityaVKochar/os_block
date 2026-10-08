@@ -113,6 +113,15 @@ class SyntheticAuditdFormatTests(unittest.TestCase):
         with self.assertRaises(AuditRecordError):
             parse(lines, strict=True)
 
+    def test_interpreted_arguments_may_contain_a_lone_quote(self):
+        lines = [
+            "type=SYSCALL msg=audit(02/20/2025 13:07:05.666:110401) : arch=x86_64 syscall=execve success=yes exit=0 items=2 ppid=1 pid=2 auid=ubuntu uid=root comm=grep exe=/usr/bin/grep key=(null)",
+            "type=EXECVE msg=audit(02/20/2025 13:07:05.666:110401) : argc=3 a0=grep a1=-L a2=\"\\|'\\|(",
+        ]
+        events, parser = parse(lines)
+        self.assertEqual(parser.rejected, {})
+        self.assertEqual(events[0]["arguments"]["argv"], ["grep", "-L", "\"\\|'\\|("])
+
     def test_missing_identity_rejects_the_event(self):
         events, parser = parse(["type=SYSCALL msg=audit(1726048800.250:7): arch=c000003e syscall=59 uid=0 pid=3"])
         self.assertEqual(events, [])

@@ -88,8 +88,13 @@ class AuditRecordError(ValueError):
     """A single malformed audit record; the reason is used as a statistics key."""
 
 
-def tokenize(body: str) -> dict[str, tuple[str, bool]]:
-    """Split `k=v k="quoted v" k='v'` into {key: (value, was_quoted)}; first occurrence wins."""
+def tokenize(body: str, literal_quotes: bool = False) -> dict[str, tuple[str, bool]]:
+    """Split `k=v k="quoted v" k='v'` into {key: (value, was_quoted)}; first occurrence wins.
+
+    `ausearch -i` prints decoded arguments verbatim, so an argument such as
+    `"\\|'` can open a quote it never closes; with literal_quotes that quote is
+    read as part of an unquoted value instead of rejecting the record.
+    """
     fields: dict[str, tuple[str, bool]] = {}
     index, length = 0, len(body)
     while index < length:
@@ -102,11 +107,11 @@ def tokenize(body: str) -> dict[str, tuple[str, bool]]:
                 index += 1
             continue
         key, index = match.group(), match.end() + 1
-        if index < length and body[index] in "\"'":
-            quote = body[index]
-            end = body.find(quote, index + 1)
-            if end < 0:
-                raise AuditRecordError("unbalanced quote")
+        opens_quote = index < length and body[index] in "\"'"
+        end = body.find(body[index], index + 1) if opens_quote else -1
+        if opens_quote and end < 0 and not literal_quotes:
+            raise AuditRecordError("unbalanced quote")
+        if end >= 0:
             value, quoted, index = body[index + 1:end], True, end + 1
         else:
             end = index
@@ -233,7 +238,7 @@ class AuditdParser:
             if record_type == "EOE":
                 group = self._open.pop(key, None)
                 return [event for event in [self._finish(group)] if event]
-            fields = tokenize(body)
+            fields = tokenize(body, literal_quotes=interpreted)
         except AuditRecordError as error:
             if self.strict:
                 raise

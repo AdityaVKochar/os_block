@@ -1,98 +1,106 @@
 # B-SCAF prototype
 
-This is the first working slice of the **Blockchain-Based System Call Audit Framework** described in the project proposal. It is deliberately lightweight: raw events are kept locally, while hashes, Merkle roots and signed checkpoints provide tamper evidence.
+Working prototype of the **Blockchain-Based System Call Audit Framework** described in the project brief (`project-documents/`). Raw system-call events stay in a local store; SHA-256 hash chains, Merkle batch roots, Ed25519-signed checkpoint blocks and a quorum of independent witnesses make any later change to committed evidence detectable.
 
-## Implemented in this milestone
+It has been validated end to end on 100 real Linux auditd logs from the public [Splunk Attack Data](https://github.com/splunk/attack_data) repository; see [`docs/ARCHITECTURE_AND_DEMO.md`](docs/ARCHITECTURE_AND_DEMO.md) and the generated `results/REAL_DATA_REPORT.md`. What is finished and what remains is tracked in [`docs/REMAINING_WORK.md`](docs/REMAINING_WORK.md).
 
-- Canonical system-call event normalization and validation.
-- SHA-256 hash chain across events.
-- Fixed-size Merkle batches with inclusion-proof generation.
-- Ed25519-signed checkpoint ledger stored as JSON Lines.
-- Offline verifier that detects modified, deleted, inserted or reordered events.
-- A JSONL ingestion interface that can later be fed by auditd/eBPF collectors.
+## What it does
 
-It does **not** yet collect kernel events directly. The `ingest` command is intentionally the integration boundary for an auditd/eBPF adapter, which is a later milestone.
+- **Collection adapter** for real auditd output: raw `audit.log`, ENRICHED logs, `node=` prefixes and `ausearch -i` exports. SYSCALL, EXECVE, PATH, CWD, SOCKADDR and PROCTITLE records of one kernel event are merged, so events carry argv, file paths and socket destinations. Per-architecture syscall tables (x86_64, aarch64, i386), streaming input (`-`, `.gz`), `--follow` with log rotation, and de-duplication on re-ingest.
+- **Privacy policy**: an allow-list of security-relevant system calls, redaction of secret-looking keys and inline `--password=…` style arguments, truncation, and a policy version recorded in every block.
+- **Evidence chain**: each event's hash covers the previous event's hash; blocks close every N events, every T seconds of event time, or on a host change, and commit a Merkle root, time window and policy version under an Ed25519 signature.
+- **Verification** that names the first invalid item: altered, missing, inserted or reordered events, changed roots or blocks, invalid signatures, replayed or out-of-range blocks. Verdicts are `pass`, `fail` or `partial` (evidence not yet committed or witness quorum unreachable).
+- **Witness quorum**: witnesses accept only blocks that extend the chain they hold, refuse and record conflicting blocks, and return signed acknowledgements. `verify --witness` compares the local ledger with each witness copy, which detects tail truncation and history re-signed with a stolen source key, both invisible to local checks.
+- **Portable proofs**: one event's Merkle path plus its signed block, verifiable with only the public key.
+- **Evaluation harness** comparing plain logging, a hash chain alone and B-SCAF (throughput, latency, commit delay, CPU, memory, storage, verification and replication time).
+- A small dependency-free **dashboard**.
 
-## Quick start (PowerShell)
+## Run it in a container (nothing to install on the host)
 
-```powershell
-$py = "C:\Users\adity\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
-& $py -m pip install -e .
-& $py -m bscaf --data-dir .\audit-data init
-& $py -m bscaf --data-dir .\audit-data demo
-& $py -m bscaf --data-dir .\audit-data verify
+```bash
+sudo docker build -t bscaf .
 ```
 
-The final command prints a JSON integrity report. A clean run returns `valid: true`.
-
-To ingest your own newline-delimited JSON events:
-
-```powershell
-& $py -m bscaf --data-dir .\audit-data ingest --input .\samples\events.jsonl
-& $py -m bscaf --data-dir .\audit-data flush
+```bash
+sudo docker run --rm -v "$PWD":/app bscaf pytest -q
 ```
 
-Each event needs `syscall`, `pid`, `ppid`, `uid`, and `timestamp` (ISO-8601 UTC). Optional `arguments`, `return_code`, `host_id` and `process` fields are supported.
-
-## Demonstrating the complete evidence flow
-
-1. Ingest an event stream and flush its final partial batch.
-2. Export a proof for a committed event.
-3. Verify that proof from the exported JSON and the source public key.
-
-```powershell
-& $py -m bscaf --data-dir .\audit-data proof --sequence 1 | Out-File -Encoding utf8 .\proof.json
-& $py -m bscaf --data-dir .\audit-data proof-verify --input .\proof.json --public-key .\audit-data\signing-public.pem
+```bash
+sudo docker run --rm -v "$PWD":/app -w /app bscaf python scripts/run_real_data.py
 ```
 
-For a Linux auditd source, first configure audit rules appropriate to the host and export raw audit records. The adapter accepts `type=SYSCALL` lines:
+The last command downloads the pinned dataset (about 1.5 MB, SHA-256 checked), ingests it, verifies it, exercises proofs, witnesses and every attack scenario, benchmarks 100,000 replayed events, and writes `results/REAL_DATA_REPORT.md`. Add `--skip-bench` for a two-minute run. (Without `sudo`, add your user to the `docker` group once.)
 
-```powershell
-& $py -m bscaf --data-dir .\audit-data ingest-auditd --input .\samples\auditd-syscall.log --host-id lab-host
+For an interactive shell with the `bscaf` command available:
+
+```bash
+sudo docker run --rm -it -v "$PWD":/app -w /app -p 8000:8000 bscaf bash
 ```
 
-### Independent witness node
+## Quick start
 
-On the witness machine, trust the source node's public key once, then run the small HTTP witness service:
-
-```powershell
-& $py -m bscaf witness-trust --witness-dir .\witness-data --trusted-signer-id local-witness --public-key .\audit-data\signing-public.pem
-& $py -m bscaf witness-serve --witness-dir .\witness-data --host 127.0.0.1 --port 8080
+```bash
+bscaf --data-dir audit-data init
+bscaf --data-dir audit-data demo
+bscaf --data-dir audit-data verify
 ```
 
-On the source machine, replicate signed checkpoint blocks only:
+`python -m bscaf …` is equivalent. Outside the container, `pip install -e .[test]` with Python 3.11+.
 
-```powershell
-& $py -m bscaf --data-dir .\audit-data replicate --url http://127.0.0.1:8080
+Ingest your own data:
+
+```bash
+bscaf --data-dir audit-data ingest --input samples/events.jsonl
+bscaf --data-dir audit-data ingest-auditd --input /var/log/audit/audit.log --host-id web-01
+bscaf --data-dir audit-data flush
 ```
 
-The witness never receives raw events. It rejects unknown signers, modified blocks and invalid signatures.
+JSONL events need `syscall`, `pid`, `ppid`, `uid` and an ISO-8601 `timestamp` with a timezone; `arguments`, `return_code`, `host_id` and `process` are optional. On a live Linux host, load `deploy/audit/bscaf.rules` and tail the log with `ingest-auditd --follow --batch-seconds 5`.
 
-## Minimal demonstration UI
+Export and check one event's proof:
 
-Start the local black-and-white dashboard:
-
-```powershell
-$env:PYTHONPATH = "src"
-& $py -m bscaf.cli --data-dir .\audit-data-ui --batch-size 2 ui
+```bash
+bscaf --data-dir audit-data proof --sequence 1 > proof.json
+bscaf proof-verify --input proof.json --public-key audit-data/signing-public.pem
 ```
 
-The browser opens at `http://127.0.0.1:8000`. Use **Add demo events** to create and commit a three-event audit trail. The dashboard then displays the integrity verdict, event count, checkpoint count, problems, recent system calls, and checkpoint hashes. Use **Verify integrity** to rerun all chain, Merkle-root, block-link, and signature checks.
+## Witnesses
 
-The UI uses only Python's standard-library HTTP server and embedded HTML/CSS/JavaScript; it introduces no web-framework or frontend dependency. It binds to localhost by default and is intended for demonstration. Use `--no-browser` on a headless Linux machine.
+On each witness machine:
 
-## Command summary
+```bash
+bscaf witness-init --witness-dir witness-1 --witness-id witness-1
+bscaf witness-trust --witness-dir witness-1 --trusted-signer-id local-witness --public-key signing-public.pem
+bscaf witness-serve --witness-dir witness-1 --host 0.0.0.0 --port 8080
+```
+
+On the source, replicate to all witnesses and verify against them (copy each `witness-public.pem` to the auditor first):
+
+```bash
+bscaf --data-dir audit-data replicate --url http://w1:8080 --url http://w2:8080 --url http://w3:8080 --quorum 2
+bscaf --data-dir audit-data verify --witness http://w1:8080 --witness http://w2:8080 --witness http://w3:8080 --witness-key witness-1=w1.pem --witness-key witness-2=w2.pem --witness-key witness-3=w3.pem --quorum 2
+```
+
+Witnesses receive signed checkpoint metadata only, never raw events.
+
+## Commands
 
 | Command | Purpose |
 | --- | --- |
-| `init` | Create event/checkpoint stores and an Ed25519 key pair. |
-| `ingest` / `ingest-auditd` | Add selected JSONL events or raw auditd SYSCALL records. |
-| `flush` | Commit a final partial batch. |
-| `verify` / `status` | Verify event links, batch roots, block links and signatures. |
+| `init` | Create the event and checkpoint stores and an Ed25519 key pair. |
+| `ingest` / `ingest-auditd` | Add JSONL events, or auditd logs (`--follow`, `--strict`, `--assume-tz`, `--no-dedupe`). |
+| `flush` | Commit the pending partial batch. |
+| `verify` / `status` | Verify chain, roots, block links, ranges and signatures; with `--witness`, also against witnesses. |
 | `proof` / `proof-verify` | Export and independently verify one committed event's proof. |
-| `witness-trust`, `witness-serve`, `replicate` | Set up and use a permissioned checkpoint witness. |
-| `ui` | Run the minimal local integrity dashboard. |
+| `policy` | Print the effective policy and its version. |
+| `witness-init`, `witness-trust`, `witness-serve`, `replicate` | Run witnesses and replicate to a quorum. |
+| `bench` | Run the Phase 6 performance comparison. |
+| `ui` | Run the local dashboard (`--host 0.0.0.0 --no-browser` inside a container). |
+
+Global options: `--batch-size N`, `--batch-seconds T`, `--policy file.json`, `--all-syscalls`, `--signer-id`, `--no-fsync` (benchmarks only).
+
+Data directories created before this version use an older checkpoint format and must be recreated.
 
 ## Security scope
 
-B-SCAF makes post-commit changes to its local event store evident when the signing public key and checkpoint ledger remain protected. It cannot prove that a fully compromised kernel did not fabricate an event before collection. Production use needs protected private-key storage, remote witness replication, access control and a real auditd/eBPF collector.
+B-SCAF makes changes to committed evidence detectable as long as the source public key is trusted and a quorum of witnesses is honest and reachable. It cannot prove that a compromised kernel or collector did not fabricate or drop events before collection, and events not yet in a block are only protected once committed. Production use still needs protected key storage, authenticated transport between nodes and a live-host evaluation; see `docs/REMAINING_WORK.md`.

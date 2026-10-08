@@ -1,128 +1,114 @@
 # B-SCAF Architecture and Demo Guide
 
-This guide describes the implemented MVP of the Blockchain-Based System Call Audit Framework (B-SCAF) and provides a repeatable PowerShell demo.
+This guide describes the implemented Blockchain-Based System Call Audit Framework (B-SCAF): its architecture, threat model, and a repeatable demo. Every command runs inside the project container, so the host needs only Docker:
+
+```bash
+sudo docker build -t bscaf .
+```
+
+```bash
+sudo docker run --rm -it -v "$PWD":/app -w /app -p 8000:8000 bscaf bash
+```
+
+The commands in sections 5–10 are typed in that container shell.
 
 ## 1. Architecture at a glance
 
 ```mermaid
 flowchart TB
     P["Linux process"] --> SC["System call: execve, openat, connect, ..."]
-    SC --> C["Collector adapter\nJSONL input or auditd SYSCALL parser"]
-    C --> POL["Privacy policy\nallow-list + argument redaction"]
-    POL -->|"accepted event"| N["Canonical normalizer\nUTC timestamp + fixed event schema"]
+    SC --> K["Kernel audit subsystem\n(deploy/audit/bscaf.rules)"]
+    K --> LOG[("audit.log\nraw / ENRICHED / ausearch -i")]
+    LOG --> C["auditd adapter\ngroups SYSCALL + EXECVE + PATH + CWD + SOCKADDR + PROCTITLE"]
+    J["JSONL events"] --> POL
+    C --> POL["Versioned privacy policy\nallow-list + redaction + truncation"]
+    POL -->|"accepted"| N["Canonical normalizer\nUTC timestamp + fixed schema"]
     POL -->|"not selected"| DROP["Dropped"]
     N --> HC["SHA-256 event hash chain\nevent_hash = H(event || previous_event_hash)"]
-    HC --> ES[("events.jsonl\nraw local event store")]
-    HC --> MB["Merkle batch builder\nN events per batch"]
-    MB --> CP["Checkpoint block\nMerkle root + previous block hash"]
+    HC --> ES[("events.jsonl")]
+    HC --> MB["Batch builder\nN events, T seconds or host change"]
+    MB --> CP["Checkpoint block\nMerkle root, time window, policy version,\nprevious block hash"]
     CP --> SIG["Ed25519 signer"]
-    SIG --> CS[("checkpoints.jsonl\nlocal proof ledger")]
-    SIG --> REP["Replicate signed block only"]
-    REP --> W["Trusted witness HTTP service"]
-    W --> WS[("witness-checkpoints.jsonl")]
-    ES --> V["Local verifier"]
-    CS --> V
-    V --> R["Integrity report\nvalid / problems"]
-    ES --> PR["Merkle inclusion proof"]
-    CS --> PR
-    PR --> OV["Offline proof verifier\nusing public key"]
+    SIG --> CS[("checkpoints.jsonl")]
+    SIG --> REP["replicate --quorum K\n(signed blocks only)"]
+    REP --> W1["Witness 1"] & W2["Witness 2"] & W3["Witness 3"]
+    W1 & W2 & W3 -->|"signed acks"| ACK[("witness-acks.jsonl")]
+    ES & CS --> V["Verifier"]
+    W1 & W2 & W3 -->|"witnessed chain"| V
+    ACK --> V
+    V --> R["Report: pass / partial / fail\nfirst invalid item"]
+    ES & CS --> PR["Merkle inclusion proof"] --> OV["Offline proof verifier\n(public key only)"]
 ```
 
-## 2. Components and responsibilities
+## 2. Threat model
+
+**Protected assets.** The integrity, order and origin of committed system-call events. Their availability, through independent witness copies. The confidentiality of argument values, through policy redaction before hashing and through witnesses receiving metadata only.
+
+**Attacker abilities assumed.**
+
+- Root on the source host after collection: they can edit, delete, insert or reorder lines in `events.jsonl`, `checkpoints.jsonl` and `witness-acks.jsonl`.
+- They can read the source signing key and re-sign a rewritten history.
+- They can take some witnesses offline.
+
+**What B-SCAF guarantees.** Any change to a committed event or block is reported, provided two things hold. First, the verifier trusts the source public key. Second, at least the quorum of witnesses is honest and reachable. Changes that keep every local hash and signature consistent are still caught by comparison with the witnessed chain: re-signing with a stolen key, or deleting the newest blocks. Witnesses refuse conflicting blocks and keep evidence of the attempt.
+
+**What it does not guarantee.**
+
+- A compromised kernel, auditd or collector can fabricate or drop events before collection. This is the capture-trust limit.
+- Events not yet in a signed, replicated block can be deleted unnoticed.
+- If every witness is compromised, or unreachable, the verdict is `partial`, not `pass`.
+
+## 3. Components
 
 | Component | Source file | Responsibility |
 | --- | --- | --- |
-| Event model | `src/bscaf/models.py` | Validates required fields, canonicalizes timestamps, and calculates event/block hashes. |
-| Canonical encoding | `src/bscaf/canonical.py` | Produces deterministic JSON before SHA-256 calculations. |
-| Privacy policy | `src/bscaf/policy.py` | Keeps only security-relevant system calls and redacts sensitive arguments such as `token`, `password`, and `secret`. |
-| Auditd adapter | `src/bscaf/auditd.py` | Translates Linux `type=SYSCALL` records into the B-SCAF event schema. |
-| Evidence store | `src/bscaf/store.py` | Maintains newline-delimited raw events and signed checkpoint blocks. |
-| Merkle module | `src/bscaf/merkle.py` | Builds batch roots and membership proofs. |
-| Signature module | `src/bscaf/crypto.py` | Creates and verifies Ed25519 checkpoint signatures. |
-| Audit service | `src/bscaf/service.py` | Orchestrates ingest, batching, checkpoint creation, local validation, and proof export. |
-| Witness service | `src/bscaf/witness.py` | Retains validated signed checkpoint metadata on an independent node. |
-| CLI | `src/bscaf/cli.py` | Provides the operational commands used below. |
+| Event model | `src/bscaf/models.py` | Validates fields, canonicalizes timestamps, and computes event and block hashes. |
+| Canonical encoding | `src/bscaf/canonical.py` | Deterministic JSON before every SHA-256. |
+| Privacy policy | `src/bscaf/policy.py` | Syscall allow-list, key and inline-secret redaction, truncation, policy version. |
+| auditd adapter | `src/bscaf/auditd.py` | Parses raw, ENRICHED, `node=` and `ausearch -i` records, merges the records of one event, and maps syscall numbers per architecture. |
+| Evidence store | `src/bscaf/store.py` | Append-only JSONL ledgers, fsync per block, writer lock. |
+| Merkle and signatures | `src/bscaf/merkle.py`, `crypto.py` | Batch roots, inclusion proofs, Ed25519. |
+| Audit service | `src/bscaf/service.py` | Ingest with cached tail state, batching, signing, single-pass verification, proofs. |
+| Witnesses | `src/bscaf/witness.py` | Chain-continuity checks, equivocation records, signed acks, quorum replication, witness comparison. |
+| Attack scenarios | `src/bscaf/attacks.py` | The brief's tampering tests, reusable on any store. |
+| Benchmark | `src/bscaf/bench.py` | Phase 6 comparison of plain logging, hash chain and B-SCAF. |
+| CLI and dashboard | `src/bscaf/cli.py`, `ui.py` | Operational commands and the local web view. |
 
-## 3. Evidence lifecycle
+## 4. Evidence lifecycle
 
-1. A collector produces a JSON event or an auditd adapter parses a `SYSCALL` record.
-2. The policy allow-list selects relevant calls and redacts sensitive argument values.
-3. B-SCAF normalizes the event and computes its SHA-256 hash, including the preceding event hash.
-4. Events are persisted locally and grouped into batches. A Merkle root commits every event hash in that batch.
-5. B-SCAF creates a checkpoint containing the root, batch range, previous block hash, signer identity, and timestamp. The checkpoint is Ed25519-signed.
-6. The signed block can be replicated to a configured witness. No raw event data is sent to the witness.
-7. An auditor can validate the complete local store or validate one event's exported Merkle proof offline.
+1. auditd writes several records per kernel event. The adapter groups them by `audit(<time>:<serial>)`, emits one event with argv, paths, cwd and destination, and drops raw register values.
+2. The policy selects relevant calls and redacts secrets. Its version is recorded in each block.
+3. Each event is hashed together with the previous event hash and appended to `events.jsonl`.
+4. A block closes after N events, after T seconds of event time, or when the host changes. The Merkle root, sequence range, time window, policy version and previous block hash are signed with Ed25519. Events are fsynced before their block.
+5. `replicate` sends signed blocks, never events, to the witnesses and stores their signed acknowledgements.
+6. `verify` checks the chain, roots, links, ranges, replay and signatures. With `--witness`, it also compares against each witness copy and checks acks.
 
-## 4. Data retained at each layer
+## 5. Demo: create and verify a ledger
 
-| Layer | Stored data | Purpose |
-| --- | --- | --- |
-| Local event store | Normalized event attributes, previous event hash, event hash | Forensic search and chain verification. |
-| Local checkpoint ledger | Batch boundaries, Merkle root, block link, signature | Compact immutable commitment for each event batch. |
-| Witness ledger | Signed checkpoint block only | Independent proof of commitment without exposing raw system-call records. |
-
-## 5. Prerequisites
-
-Run the commands from `D:\projects\os_block`. The commands below use the bundled Python runtime available in this Codex environment.
-
-```powershell
-$env:PYTHONPATH = "src"
-$py = "C:\Users\adity\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
+```bash
+bscaf --data-dir demo --batch-size 2 demo
 ```
 
-For a standalone setup, install the project dependencies from `pyproject.toml` and use any Python 3.11+ runtime with `cryptography` installed.
-
-## 6. Demo: create and verify an audit ledger
-
-Run the built-in demo with a batch size of two. It creates three events, commits two checkpoint blocks, and validates the ledger.
-
-```powershell
-& $py -m bscaf.cli --data-dir .\audit-data-demo --batch-size 2 demo
-```
-
-Observed output from this workspace:
+This ingests three events, commits two blocks and prints the report:
 
 ```json
 {
   "valid": true,
+  "verdict": "pass",
   "events_checked": 3,
   "checkpoints_checked": 2,
-  "problems": []
+  "first_problem": null,
+  "problems": [],
+  "warnings": []
 }
 ```
 
-Check the current status at any time:
+## 6. Demo: export and independently verify one event
 
-```powershell
-& $py -m bscaf.cli --data-dir .\audit-data-demo status
+```bash
+bscaf --data-dir demo proof --sequence 1 > demo/proof.json
+bscaf proof-verify --input demo/proof.json --public-key demo/signing-public.pem
 ```
-
-Observed output:
-
-```json
-{
-  "data_dir": "audit-data-demo",
-  "valid": true,
-  "events_checked": 3,
-  "checkpoints_checked": 2,
-  "problems": []
-}
-```
-
-## 7. Demo: export and independently verify one event
-
-Export a Merkle inclusion proof for event sequence 1 and verify it with only the proof and the trusted public key.
-
-```powershell
-& $py -m bscaf.cli --data-dir .\audit-data-demo proof --sequence 1 |
-    Out-File -Encoding utf8 .\audit-data-demo\proof.json
-
-& $py -m bscaf.cli --data-dir .\audit-data-demo proof-verify `
-    --input .\audit-data-demo\proof.json `
-    --public-key .\audit-data-demo\signing-public.pem
-```
-
-Observed output:
 
 ```json
 {
@@ -133,92 +119,111 @@ Observed output:
 }
 ```
 
-## 8. Demo: ingest supplied JSONL or auditd input
+## 7. Demo: ingest real auditd data
 
-The repository includes sample data under `samples/`.
-
-```powershell
-# New, clean audit store for this example
-& $py -m bscaf.cli --data-dir .\audit-data-input init
-& $py -m bscaf.cli --data-dir .\audit-data-input ingest --input .\samples\events.jsonl
-& $py -m bscaf.cli --data-dir .\audit-data-input flush
-& $py -m bscaf.cli --data-dir .\audit-data-input verify
+```bash
+python scripts/fetch_datasets.py
+bscaf --data-dir real --all-syscalls ingest-auditd --input datasets/raw/splunk-attack-data-auditd/datasets/attack_techniques/T1068/linux_auditd_copy_fail/linux_auditd.log --host-id lab-1
+bscaf --data-dir real flush
+bscaf --data-dir real verify
 ```
 
-The sample `connect` event contains a `token` field. The policy stores it as `[REDACTED]` before hashing and persistence.
+The ingest report lists:
 
-To parse one raw Linux auditd syscall record:
+- the accepted events and the events ignored by policy;
+- rejected records, by reason;
+- duplicate records merged;
+- records that arrived without their SYSCALL record;
+- unresolved user names;
+- unmapped system calls.
 
-```powershell
-& $py -m bscaf.cli --data-dir .\audit-data-input ingest-auditd `
-    --input .\samples\auditd-syscall.log --host-id lab-host
-& $py -m bscaf.cli --data-dir .\audit-data-input flush
+Running the same `ingest-auditd` command again reports every record under `duplicates_skipped`.
+
+## 8. Demo: witness quorum and tampering
+
+Start three witnesses in the background, then replicate with quorum 2:
+
+```bash
+for i in 1 2 3; do
+  bscaf witness-init --witness-dir w$i --witness-id witness-$i
+  bscaf witness-trust --witness-dir w$i --trusted-signer-id local-witness --public-key real/signing-public.pem
+  bscaf witness-serve --witness-dir w$i --port 808$i &
+done
+bscaf --data-dir real replicate --url http://127.0.0.1:8081 --url http://127.0.0.1:8082 --url http://127.0.0.1:8083 --quorum 2
 ```
 
-## 9. Demo: independent witness replication
+Verify against the witnesses:
 
-Use two PowerShell terminals. On the witness terminal, configure the source public key and start the service:
-
-```powershell
-$env:PYTHONPATH = "src"
-$py = "C:\Users\adity\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
-
-& $py -m bscaf.cli witness-trust `
-    --witness-dir .\witness-data `
-    --trusted-signer-id local-witness `
-    --public-key .\audit-data-demo\signing-public.pem
-
-& $py -m bscaf.cli witness-serve --witness-dir .\witness-data --host 127.0.0.1 --port 8080
+```bash
+W="--witness http://127.0.0.1:8081 --witness http://127.0.0.1:8082 --witness http://127.0.0.1:8083 --witness-key witness-1=w1/witness-public.pem --witness-key witness-2=w2/witness-public.pem --witness-key witness-3=w3/witness-public.pem --quorum 2"
+bscaf --data-dir real verify $W
 ```
 
-On the source terminal, replicate the two signed checkpoint blocks:
+Now act as an attacker with root on the source. Delete the newest block and its events:
 
-```powershell
-& $py -m bscaf.cli --data-dir .\audit-data-demo replicate --url http://127.0.0.1:8080
+```bash
+sed -i '$d' real/checkpoints.jsonl
+python - <<'EOF'
+import json
+last = max(json.loads(l)["last_sequence"] for l in open("real/checkpoints.jsonl"))
+lines = [l for l in open("real/events.jsonl") if json.loads(l)["sequence"] <= last]
+open("real/events.jsonl", "w").writelines(lines)
+EOF
+bscaf --data-dir real verify
+bscaf --data-dir real verify $W
 ```
 
-Expected response shape:
+Local verification still says `pass`, because every remaining hash and signature is consistent. Verification against the witnesses says `fail` with a `truncation` problem. Stopping one witness (`kill %1`) leaves the verdict at `pass` with a `witness-unavailable` notice. Stopping two makes it `partial`.
 
-```json
-{
-  "replicated": 2,
-  "results": [
-    {"accepted": true, "duplicate": false, "block_hash": "..."},
-    {"accepted": true, "duplicate": false, "block_hash": "..."}
-  ]
-}
+To run every scenario automatically (modify, delete, insert, reorder, root change, replay, truncation, rewrite-and-re-sign with the stolen key, forged ack, witness offline, quorum lost) on any store:
+
+```bash
+python scripts/attack_matrix.py --data-dir real
 ```
 
-Re-running the same command is safe: the witness returns `duplicate: true` for blocks it already retains.
+## 9. Full real-data validation and benchmarks
 
-## 10. Tamper-detection demonstration
-
-The verification logic detects a changed event, a broken event link, a changed Merkle root, a modified checkpoint, an invalid signature, and missing/reordered events. The automated test suite exercises clean validation, tampering, Merkle proofs, policy handling, auditd conversion, witness acceptance, and offline proof verification.
-
-```powershell
-& $py -m unittest discover -s tests -v
+```bash
+python scripts/run_real_data.py
 ```
 
-Observed result on 11 September 2026:
+This writes `results/REAL_DATA_REPORT.md` and `results/real-data-summary.json`, covering:
 
-```text
-Ran 8 tests in 0.065s
+- dataset provenance;
+- before/after comparison;
+- ingestion statistics;
+- syscall distribution;
+- verification;
+- proofs;
+- the witness quorum;
+- the attack matrix;
+- the Phase 6 performance table (100,000 replayed events).
 
-OK
+To run the benchmark on its own: `bscaf bench --events 100000 --fsync`.
+
+## 10. Dashboard
+
+```bash
+bscaf --data-dir ui-demo --batch-size 2 ui --host 0.0.0.0 --no-browser
 ```
 
-## 11. Minimal web dashboard
+Open `http://127.0.0.1:8000` on the host. **Add demo events** commits a three-event trail. **Verify integrity** reruns every check and shows `INTEGRITY VALID`, `PARTIAL EVIDENCE` or `INTEGRITY FAILED`, together with the policy version, problems and warnings.
 
-Run the dependency-free black-and-white demonstration interface:
+## 11. Tests
 
-```powershell
-& $py -m bscaf.cli --data-dir .\audit-data-ui --batch-size 2 ui
+```bash
+pytest -q
 ```
 
-The browser opens at `http://127.0.0.1:8000`. Select **Add demo events** to populate the ledger, then use **Verify integrity** to present the validation result. The interface shows recent system calls and signed checkpoints without changing the underlying command-line workflow.
+The suite covers:
 
-## 12. Security boundaries and future work
+- integrity and tampering;
+- real-data parser fixtures, including every log format;
+- the CLI, including re-ingest de-duplication;
+- the full attack matrix against three HTTP witnesses;
+- witness chain rules;
+- the benchmark harness.
 
-B-SCAF detects post-commit modification when its checkpoint ledger and trusted public keys remain available. It does not prove that a fully compromised operating-system kernel did not fabricate events before collection.
+## 12. Limits and future work
 
-For production deployment, add an eBPF-based collector, protected private-key storage (TPM/HSM), TLS and mutual authentication for witness communication, durable remote witness quorum rules, log rotation, role-based access control, and a searchable dashboard.
+See [`REMAINING_WORK.md`](REMAINING_WORK.md). The main items are a live-host run with auditd, an eBPF collector, protected keys, authenticated transport, and an indexed store for very large ledgers.
