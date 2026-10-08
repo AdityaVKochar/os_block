@@ -106,9 +106,11 @@ DASHBOARD_HTML = r"""<!doctype html>
       $('checkpoint-count').textContent = report.checkpoints_checked;
       $('problem-count').textContent = report.problems.length;
       $('status').className = report.valid ? 'status' : 'status invalid';
-      $('status').innerHTML = '<strong>'+(report.valid?'INTEGRITY VALID':'INTEGRITY FAILED')+'</strong><span>'+safe(data.data_dir)+'</span>';
-      $('problems').innerHTML = report.problems.length
-        ? '<ul class="problems">'+report.problems.map(p=>'<li><strong>'+safe(p.type)+'</strong>: '+safe(p.detail)+'</li>').join('')+'</ul>'
+      const verdicts = {pass:'INTEGRITY VALID', partial:'PARTIAL EVIDENCE', fail:'INTEGRITY FAILED'};
+      $('status').innerHTML = '<strong>'+(verdicts[report.verdict]||'INTEGRITY FAILED')+'</strong><span>'+safe(data.data_dir)+' · policy '+safe(data.policy_version)+'</span>';
+      const findings = report.problems.concat(report.warnings||[]);
+      $('problems').innerHTML = findings.length
+        ? '<ul class="problems">'+findings.map(p=>'<li><strong>'+safe(p.type)+'</strong>: '+safe(p.detail)+'</li>').join('')+'</ul>'
         : 'No problems detected.';
       $('events').innerHTML = table(['Seq.','Time','System call','PID','UID','Process','Hash'], data.events.map(e=>[
         safe(e.sequence),safe(e.timestamp),'<strong>'+safe(e.syscall)+'</strong>',safe(e.pid),safe(e.uid),safe(e.process),'<code>'+safe(shortHash(e.event_hash))+'</code>'
@@ -147,6 +149,7 @@ class DashboardController:
             checkpoints = [checkpoint.to_dict() for checkpoint in self.service.checkpoints()][-50:]
             return {
                 "data_dir": str(self.service.store.root),
+                "policy_version": self.service.policy.version,
                 "report": self.service.verify(),
                 "events": list(reversed(events)),
                 "checkpoints": list(reversed(checkpoints)),

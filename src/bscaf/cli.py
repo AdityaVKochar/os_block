@@ -11,7 +11,7 @@ from typing import Any, Iterator
 from .auditd import AuditdParser, event_order, follow_lines, open_lines, parse_timezone
 from .policy import AuditPolicy
 from .service import AuditService
-from .witness import WitnessStore, replicate_checkpoint, serve_witness
+from .witness import WitnessStore, replicate, serve_witness, verify_with_witnesses
 from .proof import verify_exported_proof
 from .ui import serve_ui
 
@@ -128,7 +128,11 @@ def main() -> None:
     auditd.add_argument("--follow", action="store_true", help="keep tailing the log (handles rotation); Ctrl+C to stop")
     auditd.add_argument("--no-dedupe", action="store_true", help="also ingest records older than the last ingested one for the host")
     sub.add_parser("flush")
-    sub.add_parser("verify")
+    verify = sub.add_parser("verify", help="verify the local ledger, optionally against witnesses")
+    verify.add_argument("--witness", action="append", default=[], help="witness base URL (repeatable)")
+    verify.add_argument("--witness-key", action="append", default=[], help="WITNESS_ID=public-key.pem for checking acks (repeatable)")
+    verify.add_argument("--quorum", type=int, default=1, help="consistent witnesses required for a pass verdict")
+    verify.add_argument("--timeout", type=float, default=5.0)
     proof = sub.add_parser("proof")
     proof.add_argument("--sequence", type=int, required=True)
     proof_verify = sub.add_parser("proof-verify")
@@ -136,8 +140,13 @@ def main() -> None:
     proof_verify.add_argument("--public-key", required=True, help="trusted source Ed25519 public key")
     sub.add_parser("status")
     sub.add_parser("policy", help="print the effective policy and its version")
-    replicate = sub.add_parser("replicate")
-    replicate.add_argument("--url", required=True, help="witness base URL, e.g. http://127.0.0.1:8080")
+    replicate_cmd = sub.add_parser("replicate", help="push checkpoints to witnesses and collect signed acks")
+    replicate_cmd.add_argument("--url", action="append", required=True, help="witness base URL (repeatable)")
+    replicate_cmd.add_argument("--quorum", type=int, default=1, help="witnesses that must hold every block")
+    replicate_cmd.add_argument("--timeout", type=float, default=5.0)
+    witness_init = sub.add_parser("witness-init", help="create a witness identity and signing key")
+    witness_init.add_argument("--witness-dir", required=True)
+    witness_init.add_argument("--witness-id", required=True)
     witness_trust = sub.add_parser("witness-trust")
     witness_trust.add_argument("--witness-dir", required=True)
     witness_trust.add_argument("--public-key", required=True)
@@ -176,6 +185,15 @@ def main() -> None:
         _print({"checkpoint": None if block is None else block.to_dict()})
     elif args.command == "verify":
         report = service.verify()
+        if args.witness:
+            try:
+                keys = {item.split("=", 1)[0]: Path(item.split("=", 1)[1]) for item in args.witness_key}
+            except IndexError:
+                parser.error("--witness-key must look like WITNESS_ID=path.pem")
+            report = verify_with_witnesses(
+                report, service.checkpoints(), service.store.acks(), service.store.public_key_path,
+                args.witness, keys, args.quorum, args.signer_id, args.timeout,
+            )
         _print(report)
         sys.exit(0 if report["valid"] else 1)
     elif args.command == "proof":
@@ -190,8 +208,15 @@ def main() -> None:
     elif args.command == "policy":
         _print({"version": service.policy.version, **service.policy.to_dict()})
     elif args.command == "replicate":
-        results = [replicate_checkpoint(args.url, checkpoint) for checkpoint in service.checkpoints()]
-        _print({"replicated": len(results), "results": results})
+        summary, acks = replicate(args.url, service.checkpoints(), service.store.acks(), args.quorum, args.timeout)
+        for ack in acks:
+            service.store.append_ack(ack)
+        _print({**summary, "new_acks": len(acks)})
+        sys.exit(0 if summary["quorum_met"] else 2)
+    elif args.command == "witness-init":
+        store = WitnessStore(Path(args.witness_dir), witness_id=args.witness_id)
+        store.initialize()
+        print(json.dumps({"witness_id": store.witness_id, "public_key": str(store.public_key_path)}))
     elif args.command == "witness-trust":
         store = WitnessStore(Path(args.witness_dir))
         destination = store.trust_signer(args.trusted_signer_id, Path(args.public_key))
