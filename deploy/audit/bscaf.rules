@@ -1,0 +1,30 @@
+## B-SCAF audit rules: the system calls selected by the default policy.
+## Install on a Linux host (not required for the container/dataset workflow):
+##   sudo cp deploy/audit/bscaf.rules /etc/audit/rules.d/bscaf.rules && sudo augenrules --load
+## Then ingest continuously:
+##   sudo bscaf --data-dir /var/lib/bscaf --batch-seconds 5 ingest-auditd --input /var/log/audit/audit.log --follow
+
+## Process execution and tracing
+-a always,exit -F arch=b64 -S execve,execveat -k bscaf_exec
+-a always,exit -F arch=b32 -S execve,execveat -k bscaf_exec
+-a always,exit -F arch=b64 -S ptrace -k bscaf_ptrace
+-a always,exit -F arch=b32 -S ptrace -k bscaf_ptrace
+
+## File creation, deletion, rename and permission changes by real users (auid >= 1000) and root
+-a always,exit -F arch=b64 -S openat,open -F dir=/etc -F perm=wa -k bscaf_file
+-a always,exit -F arch=b64 -S unlink,unlinkat,rename,renameat,renameat2 -F auid>=1000 -F auid!=unset -k bscaf_file
+-a always,exit -F arch=b64 -S chmod,fchmod,fchmodat,chown,fchown,fchownat,lchown -F auid>=1000 -F auid!=unset -k bscaf_perm
+-a always,exit -F arch=b32 -S unlink,unlinkat,rename,renameat,renameat2 -F auid>=1000 -F auid!=unset -k bscaf_file
+-a always,exit -F arch=b32 -S chmod,fchmod,fchmodat,chown,fchown,fchownat,lchown -F auid>=1000 -F auid!=unset -k bscaf_perm
+
+## Network connections
+-a always,exit -F arch=b64 -S connect,bind -F success=1 -k bscaf_net
+-a always,exit -F arch=b32 -S connect,bind -F success=1 -k bscaf_net
+
+## Identity changes
+-a always,exit -F arch=b64 -S setuid,setreuid,setresuid,setgid,setresgid -k bscaf_identity
+-a always,exit -F arch=b32 -S setuid,setreuid,setresuid,setgid,setresgid -k bscaf_identity
+
+## Kernel modules and mounts
+-a always,exit -F arch=b64 -S init_module,finit_module,delete_module -k bscaf_module
+-a always,exit -F arch=b64 -S mount,umount2 -k bscaf_mount

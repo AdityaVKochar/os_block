@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -121,6 +122,53 @@ class IntegrityTests(unittest.TestCase):
             self.assertEqual(len(dashboard["checkpoints"]), 2)
             self.assertIn("background:var(--paper)", DASHBOARD_HTML)
             self.assertNotIn("https://", DASHBOARD_HTML)
+
+
+    def test_time_window_and_host_change_close_batches(self):
+        with tempfile.TemporaryDirectory() as directory:
+            service = AuditService(Path(directory), batch_size=100, batch_seconds=2)
+            service.ingest_many([event(1), event(2), event(4), {**event(5), "host_id": "other"}])
+            service.flush()
+            blocks = service.checkpoints()
+            self.assertEqual([(block.first_sequence, block.last_sequence, block.host_id) for block in blocks], [(1, 2, "localhost"), (3, 3, "localhost"), (4, 4, "other")])
+            self.assertEqual((blocks[0].time_window_start, blocks[0].time_window_end), ("2026-09-11T10:00:01Z", "2026-09-11T10:00:02Z"))
+            self.assertEqual(blocks[0].policy_version, service.policy.version)
+            self.assertEqual(service.verify()["verdict"], "pass")
+
+    def test_pending_events_give_partial_verdict(self):
+        with tempfile.TemporaryDirectory() as directory:
+            service = AuditService(Path(directory), batch_size=5)
+            service.ingest(event(1))
+            report = service.verify()
+            self.assertTrue(report["valid"])
+            self.assertEqual(report["verdict"], "partial")
+            self.assertEqual(report["warnings"][0]["type"], "uncommitted-events")
+
+    def test_new_service_instance_resumes_the_chain(self):
+        with tempfile.TemporaryDirectory() as directory:
+            AuditService(Path(directory), batch_size=2).ingest(event(1))
+            resumed = AuditService(Path(directory), batch_size=2)
+            resumed.ingest(event(2))
+            self.assertEqual([block.batch_id for block in resumed.checkpoints()], ["1-2"])
+            self.assertEqual(resumed.verify()["verdict"], "pass")
+
+    def test_policy_file_is_versioned_and_redacts_inline_secrets(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "policy.json"
+            path.write_text(json.dumps({"allowed_syscalls": ["execve"], "max_argument_length": 25}), encoding="utf-8")
+            policy = AuditPolicy.from_file(path)
+            self.assertNotEqual(policy.version, AuditPolicy().version)
+            result = policy.apply({**event(1), "syscall": "execve", "arguments": {"argv": ["mysql", "--password=hunter2"], "paths": [{"name": "x" * 40}]}})
+            self.assertEqual(result["arguments"]["argv"][1], "--password=[REDACTED]")
+            self.assertTrue(result["arguments"]["paths"][0]["name"].endswith("[TRUNCATED]"))
+            self.assertIsNotNone(AuditPolicy(allowed_syscalls=None).apply({**event(1), "syscall": "splice"}))
+
+    def test_private_key_is_owner_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            service = AuditService(Path(directory))
+            service.initialize()
+            if os.name == "posix":
+                self.assertEqual(service.store.private_key_path.stat().st_mode & 0o777, 0o600)
 
 
 if __name__ == "__main__":

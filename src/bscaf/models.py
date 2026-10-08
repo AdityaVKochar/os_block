@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field, fields, replace
 from datetime import datetime, timezone
 from typing import Any
 
@@ -10,6 +10,11 @@ from .canonical import canonical_json, sha256_hex
 
 
 GENESIS_HASH = "0" * 64
+
+
+def parse_timestamp(value: str) -> datetime:
+    """Parse a normalized event timestamp (ISO-8601 with a trailing Z)."""
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
 def _utc_timestamp(value: str) -> str:
@@ -53,10 +58,10 @@ class AuditEvent:
             return_code=(None if payload.get("return_code") is None else int(payload["return_code"])),
             previous_event_hash=previous_hash,
         )
-        return cls(**{**asdict(event), "event_hash": event.calculate_hash()})
+        return replace(event, event_hash=event.calculate_hash())
 
     def hash_payload(self) -> dict[str, Any]:
-        payload = asdict(self)
+        payload = self.to_dict()
         payload.pop("event_hash")
         return payload
 
@@ -64,7 +69,8 @@ class AuditEvent:
         return sha256_hex(canonical_json(self.hash_payload()))
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        # Flat field copy: a recursive deep copy of arguments dominated ingest time.
+        return {name: getattr(self, name) for name in _EVENT_FIELDS}
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "AuditEvent":
@@ -81,13 +87,16 @@ class Checkpoint:
     last_sequence: int
     event_count: int
     host_id: str
+    time_window_start: str
+    time_window_end: str
+    policy_version: str
     created_at: str
     signer_id: str
     signature: str = ""
     block_hash: str = ""
 
     def unsigned_payload(self) -> dict[str, Any]:
-        payload = asdict(self)
+        payload = self.to_dict()
         payload.pop("signature")
         payload.pop("block_hash")
         return payload
@@ -96,8 +105,11 @@ class Checkpoint:
         return sha256_hex(canonical_json(self.unsigned_payload()))
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        return {item.name: getattr(self, item.name) for item in fields(self)}
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "Checkpoint":
         return cls(**payload)
+
+
+_EVENT_FIELDS = tuple(item.name for item in fields(AuditEvent))

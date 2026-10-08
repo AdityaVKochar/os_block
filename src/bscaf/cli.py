@@ -5,30 +5,128 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import sys
+from typing import Any, Iterator
 
-from .auditd import parse_syscall_line
+from .auditd import AuditdParser, event_order, follow_lines, open_lines, parse_timezone
+from .policy import AuditPolicy
 from .service import AuditService
 from .witness import WitnessStore, replicate_checkpoint, serve_witness
 from .proof import verify_exported_proof
 from .ui import serve_ui
 
 
+def _policy(args: argparse.Namespace) -> AuditPolicy:
+    policy = AuditPolicy.from_file(Path(args.policy)) if args.policy else AuditPolicy()
+    if args.all_syscalls:
+        policy = AuditPolicy(allowed_syscalls=None, redact_argument_keys=policy.redact_argument_keys, max_argument_length=policy.max_argument_length)
+    return policy
+
+
 def _service(args: argparse.Namespace) -> AuditService:
-    return AuditService(Path(args.data_dir), batch_size=args.batch_size, signer_id=args.signer_id)
+    return AuditService(
+        Path(args.data_dir),
+        batch_size=args.batch_size,
+        signer_id=args.signer_id,
+        policy=_policy(args),
+        batch_seconds=args.batch_seconds,
+        durable=not args.no_fsync,
+    )
+
+
+def _print(payload: Any) -> None:
+    print(json.dumps(payload, indent=2))
+
+
+def _jsonl(path: str) -> Iterator[dict]:
+    with open_lines(path) as handle:
+        for number, line in enumerate(handle, start=1):
+            if line.strip():
+                try:
+                    yield json.loads(line)
+                except json.JSONDecodeError as error:
+                    raise ValueError(f"input line {number}: {error}") from error
+
+
+class _IngestCursor:
+    """Remembers the newest audit record per host so re-reading a log never duplicates events."""
+
+    def __init__(self, path: Path, enabled: bool = True):
+        self.path = path
+        self.previous = json.loads(path.read_text(encoding="utf-8")) if path.exists() and enabled else {}
+        self.latest = dict(self.previous)
+        self.duplicates = 0
+
+    def fresh(self, events: Iterator[dict]) -> Iterator[dict]:
+        for event in events:
+            order = list(event_order(event))
+            if order <= self.previous.get(event["host_id"], [-1, -1]):
+                self.duplicates += 1
+                continue
+            self.latest[event["host_id"]] = max(order, self.latest.get(event["host_id"], order))
+            yield event
+
+    def save(self) -> None:
+        self.path.write_text(json.dumps(self.latest, sort_keys=True), encoding="utf-8")
+
+
+def _ingest_auditd(service: AuditService, args: argparse.Namespace) -> dict[str, Any]:
+    service.initialize()
+    parser = AuditdParser(host_id=args.host_id, assume_tz=parse_timezone(args.assume_tz), strict=args.strict)
+    cursor = _IngestCursor(service.store.ingest_state_path, enabled=not args.no_dedupe)
+    totals = {"accepted": 0, "ignored_by_policy": 0, "invalid_events": {}, "checkpoints_created": 0}
+
+    def ingest(events: list[dict]) -> None:
+        stats = service.ingest_many(cursor.fresh(iter(events)), strict=args.strict).to_dict()
+        for key in ("accepted", "ignored_by_policy", "checkpoints_created"):
+            totals[key] += stats[key]
+        for reason, count in stats["rejected"].items():
+            totals["invalid_events"][reason] = totals["invalid_events"].get(reason, 0) + count
+        cursor.save()
+
+    if args.follow:
+        pending: list[dict] = []
+        try:
+            for line in follow_lines(args.input):
+                if line is not None:
+                    pending.extend(parser.feed(line))
+                    if len(pending) < 512:
+                        continue
+                else:
+                    pending.extend(parser.finish())
+                if pending:
+                    ingest(pending)
+                    pending = []
+                service.commit_due()
+        except KeyboardInterrupt:
+            ingest(pending + parser.finish())
+    else:
+        with open_lines(args.input) as handle:
+            # Exports are often newest-first; commit a finished file in audit order.
+            ingest(sorted(parser.parse_lines(handle), key=event_order))
+    return {**totals, "duplicates_skipped": cursor.duplicates, "policy_version": service.policy.version, **parser.stats()}
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="B-SCAF lightweight audit prototype")
     parser.add_argument("--data-dir", default="audit-data")
-    parser.add_argument("--batch-size", type=int, default=10)
+    parser.add_argument("--batch-size", type=int, default=10, help="commit a block every N events")
+    parser.add_argument("--batch-seconds", type=float, help="also commit when a batch spans T seconds of events")
     parser.add_argument("--signer-id", default="local-witness")
+    parser.add_argument("--policy", help="JSON policy file (allowed_syscalls, redact_argument_keys, max_argument_length)")
+    parser.add_argument("--all-syscalls", action="store_true", help="keep every system call (redaction still applies)")
+    parser.add_argument("--no-fsync", action="store_true", help="skip fsync on commit (benchmarking only)")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("init")
-    ingest = sub.add_parser("ingest")
-    ingest.add_argument("--input", required=True, help="newline-delimited JSON event file")
-    auditd = sub.add_parser("ingest-auditd")
-    auditd.add_argument("--input", required=True, help="raw auditd log file containing SYSCALL records")
-    auditd.add_argument("--host-id", default="localhost")
+    ingest = sub.add_parser("ingest", help="ingest newline-delimited JSON events")
+    ingest.add_argument("--input", required=True, help="JSONL file, .gz file or - for stdin")
+    auditd = sub.add_parser("ingest-auditd", help="ingest raw, enriched or ausearch -i audit logs")
+    auditd.add_argument("--input", required=True, help="audit log, .gz rotation or - for stdin")
+    auditd.add_argument("--host-id", help="host identifier (default: node= field or localhost)")
+    auditd.add_argument("--assume-tz", default="UTC", help="timezone of ausearch -i local timestamps, e.g. +05:30")
+    auditd.add_argument("--strict", action="store_true", help="stop at the first malformed record")
+    auditd.add_argument("--follow", action="store_true", help="keep tailing the log (handles rotation); Ctrl+C to stop")
+    auditd.add_argument("--no-dedupe", action="store_true", help="also ingest records older than the last ingested one for the host")
     sub.add_parser("flush")
     sub.add_parser("verify")
     proof = sub.add_parser("proof")
@@ -37,6 +135,7 @@ def main() -> None:
     proof_verify.add_argument("--input", required=True, help="proof JSON exported by the proof command")
     proof_verify.add_argument("--public-key", required=True, help="trusted source Ed25519 public key")
     sub.add_parser("status")
+    sub.add_parser("policy", help="print the effective policy and its version")
     replicate = sub.add_parser("replicate")
     replicate.add_argument("--url", required=True, help="witness base URL, e.g. http://127.0.0.1:8080")
     witness_trust = sub.add_parser("witness-trust")
@@ -53,52 +152,46 @@ def main() -> None:
     ui.add_argument("--no-browser", action="store_true", help="do not open the dashboard automatically")
     sub.add_parser("demo")
     args = parser.parse_args()
-    service = _service(args)
+    try:
+        service = _service(args)
+    except (OSError, ValueError) as error:
+        parser.error(str(error))
 
     if args.command == "init":
         service.initialize()
-        print(json.dumps({"initialized": str(Path(args.data_dir))}))
+        print(json.dumps({"initialized": str(Path(args.data_dir)), "policy_version": service.policy.version}))
     elif args.command == "ingest":
-        count = 0
-        for number, line in enumerate(Path(args.input).read_text(encoding="utf-8").splitlines(), start=1):
-            if line.strip():
-                try:
-                    if service.ingest(json.loads(line)) is not None:
-                        count += 1
-                except (json.JSONDecodeError, ValueError) as error:
-                    parser.error(f"input line {number}: {error}")
-        print(json.dumps({"ingested": count}))
+        try:
+            stats = service.ingest_many(_jsonl(args.input), strict=True)
+        except (TypeError, ValueError) as error:
+            parser.error(str(error))
+        print(json.dumps({"ingested": stats.accepted, "ignored_by_policy": stats.ignored_by_policy}))
     elif args.command == "ingest-auditd":
-        accepted = 0
-        ignored = 0
-        for number, line in enumerate(Path(args.input).read_text(encoding="utf-8").splitlines(), start=1):
-            try:
-                event = parse_syscall_line(line, host_id=args.host_id)
-                if event is None:
-                    ignored += 1
-                elif service.ingest(event) is None:
-                    ignored += 1
-                else:
-                    accepted += 1
-            except ValueError as error:
-                parser.error(f"audit log line {number}: {error}")
-        print(json.dumps({"ingested": accepted, "ignored": ignored}))
+        try:
+            _print(_ingest_auditd(service, args))
+        except ValueError as error:
+            parser.error(f"audit log: {error}")
     elif args.command == "flush":
         block = service.flush()
-        print(json.dumps({"checkpoint": None if block is None else block.to_dict()}, indent=2))
+        _print({"checkpoint": None if block is None else block.to_dict()})
     elif args.command == "verify":
-        print(json.dumps(service.verify(), indent=2))
-    elif args.command == "proof":
-        print(json.dumps(service.inclusion_proof(args.sequence), indent=2))
-    elif args.command == "proof-verify":
-        payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
-        print(json.dumps(verify_exported_proof(payload, Path(args.public_key)), indent=2))
-    elif args.command == "status":
         report = service.verify()
-        print(json.dumps({"data_dir": str(Path(args.data_dir)), **report}, indent=2))
+        _print(report)
+        sys.exit(0 if report["valid"] else 1)
+    elif args.command == "proof":
+        _print(service.inclusion_proof(args.sequence))
+    elif args.command == "proof-verify":
+        payload = json.loads(Path(args.input).read_text(encoding="utf-8-sig"))
+        result = verify_exported_proof(payload, Path(args.public_key))
+        _print(result)
+        sys.exit(0 if result["valid"] else 1)
+    elif args.command == "status":
+        _print({"data_dir": str(Path(args.data_dir)), "policy_version": service.policy.version, **service.verify()})
+    elif args.command == "policy":
+        _print({"version": service.policy.version, **service.policy.to_dict()})
     elif args.command == "replicate":
         results = [replicate_checkpoint(args.url, checkpoint) for checkpoint in service.checkpoints()]
-        print(json.dumps({"replicated": len(results), "results": results}, indent=2))
+        _print({"replicated": len(results), "results": results})
     elif args.command == "witness-trust":
         store = WitnessStore(Path(args.witness_dir))
         destination = store.trust_signer(args.trusted_signer_id, Path(args.public_key))
@@ -113,10 +206,9 @@ def main() -> None:
             {"timestamp": "2026-09-11T10:00:01Z", "pid": 100, "ppid": 1, "uid": 1000, "syscall": "openat", "process": "/usr/bin/python3", "arguments": {"path": "/etc/hosts"}, "return_code": 3},
             {"timestamp": "2026-09-11T10:00:02Z", "pid": 100, "ppid": 1, "uid": 1000, "syscall": "connect", "process": "/usr/bin/python3", "arguments": {"destination": "127.0.0.1:443"}, "return_code": 0},
         ]
-        for event in events:
-            service.ingest(event)
+        service.ingest_many(events)
         service.flush()
-        print(json.dumps(service.verify(), indent=2))
+        _print(service.verify())
 
 
 if __name__ == "__main__":
