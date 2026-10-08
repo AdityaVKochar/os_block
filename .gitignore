@@ -6,3 +6,5 @@ audit-data*/
 project-documents/render-output/
 /*.docx
 ~$*.docx
+datasets/raw/
+results/

@@ -1,0 +1,510 @@
+{
+ "name": "splunk-attack-data-auditd",
+ "description": "Raw Linux auditd logs captured in Splunk Attack Range for MITRE ATT&CK techniques.",
+ "source": "https://github.com/splunk/attack_data",
+ "license": "Apache-2.0",
+ "commit": "4389fa7a4e74a7c083c0fbe448fa2c7c32378981",
+ "url_template": "https://media.githubusercontent.com/media/splunk/attack_data/{commit}/{path}",
+ "files": [
+  {
+   "path": "datasets/attack_techniques/T1003.008/linux_auditd_access_credential/auditd_proctitle_access_cred.log",
+   "sha256": "28f04ee54387630994d5c5be34ae44f31bf161dd8648242b7bdcd356a3664ff4",
+   "size": 8874
+  },
+  {
+   "path": "datasets/attack_techniques/T1003.008/linux_auditd_access_credential/linux_auditd_access_credential.log",
+   "sha256": "b155bfd88abe3861db6fb7b6591f1c414e441327485f00a6621cc738c63607b3",
+   "size": 1366
+  },
+  {
+   "path": "datasets/attack_techniques/T1016/linux_auditd_net_tool/linux_auditd_net_tool.log",
+   "sha256": "d416f83636399c4fc3d16e05cf8865ad4b37ad09b1e9b24b2c3edf3d02f13431",
+   "size": 12321
+  },
+  {
+   "path": "datasets/attack_techniques/T1016/linux_auditd_net_tool_new/linux_auditd_net_tool_bucket_new.log",
+   "sha256": "7b0f24e6f490a5f59bb92aa09740b6f0d1b5898cca788f00aff5c3efb80199a3",
+   "size": 265569
+  },
+  {
+   "path": "datasets/attack_techniques/T1030/linux_auditd_split_b_exec/auditd_execve_split.log",
+   "sha256": "6594f2541ea8143fb7f11b1f38496888f7603d2ba91002a40914d1e4a9977e05",
+   "size": 229
+  },
+  {
+   "path": "datasets/attack_techniques/T1030/linux_auditd_split_b_exec/linux_auditd_split_b_exec.log",
+   "sha256": "b2f0dfda44132b9491d9986a579ebbc8efc7f670e38939cf52fdc7929edab110",
+   "size": 216
+  },
+  {
+   "path": "datasets/attack_techniques/T1030/linux_auditd_split_syscall/linux_auditd_split_syscall.log",
+   "sha256": "b7227fbdfb54ddb683f099b96e014e186408c84d0adb7536ce892ee4b1dc1e8c",
+   "size": 459
+  },
+  {
+   "path": "datasets/attack_techniques/T1030/linux_auditd_split_syscall_new/linux_auditd_new_split.log",
+   "sha256": "cc26e035942fb454da59b44fb73ea95ddcc5abcb8f9fa739ab69dad15f0c3456",
+   "size": 716
+  },
+  {
+   "path": "datasets/attack_techniques/T1033/linux_auditd_whoami/linux_auditd_whoami.log",
+   "sha256": "fef8907e640641740bddba145768e43423be04c14fee57fe9d19293b1e5ac921",
+   "size": 1510
+  },
+  {
+   "path": "datasets/attack_techniques/T1033/linux_auditd_whoami_new/linux_auditd_new_whoami.log",
+   "sha256": "431929147fc4596b4e48f911a06543036a9c91546eacf10d00ad3b085afa8348",
+   "size": 1127
+  },
+  {
+   "path": "datasets/attack_techniques/T1053.002/linux_auditd_at/linux_auditd_at_execution.log",
+   "sha256": "e6478ab9531b3fe594ec6116c85eca43e1d4a05f711eb608a8f5d4ea50734bb6",
+   "size": 6406
+  },
+  {
+   "path": "datasets/attack_techniques/T1053.002/linux_auditd_chown_root/auditd_proctitle_chown_root.log",
+   "sha256": "605a6d045c86b3593bb09eb1371cf99a91b8d4428ce167c272e4cff585f44b83",
+   "size": 1718
+  },
+  {
+   "path": "datasets/attack_techniques/T1053.002/linux_auditd_chown_root/linux_auditd_chown_root.log",
+   "sha256": "a88b00f47da47319a41e5fa5df43b9d0f23a8e34a0986c58996f2f7822477532",
+   "size": 112
+  },
+  {
+   "path": "datasets/attack_techniques/T1053.002/linux_new_auditd_at/linux_auditd_new_at.log",
+   "sha256": "8f8a8fcd8664f1b2179686e42069bb1e6c0a11e69f0483d95ceec1f5185ba616",
+   "size": 3279
+  },
+  {
+   "path": "datasets/attack_techniques/T1053.003/auditd_path_cron/path_cron.log",
+   "sha256": "d1781b8eef7b1b634222d6cbc00044798f5ccadd1130de8517059f39ccec57cc",
+   "size": 2790
+  },
+  {
+   "path": "datasets/attack_techniques/T1053.003/linux_auditd_cron_file_audited/linux_auditd_cron_file_audited2.log",
+   "sha256": "f1edad351746ee0492e9d5dd5566ac85e018d7a8e12bc9b290ea7dfbf0f8fd1b",
+   "size": 4335
+  },
+  {
+   "path": "datasets/attack_techniques/T1053.003/linux_auditd_cron_file_audited/linux_path_cron.log",
+   "sha256": "eca54b2aecb6a55dd1b57437c99fe106d631e2fa7515a005893bdb2d66f96f63",
+   "size": 10247
+  },
+  {
+   "path": "datasets/attack_techniques/T1053.003/linux_auditd_crontab_edit/linux_auditd_crontab_edit.log",
+   "sha256": "232783bb63a77d9392d28adbbcdf381455083e399e9c9e7dcfa64072899b3217",
+   "size": 926
+  },
+  {
+   "path": "datasets/attack_techniques/T1053.003/linux_auditd_crontab_edit_new/linux_auditd_new_crontab.log",
+   "sha256": "85029e322d6526382d393a06fa1b08263d673774c6060805c4a9fe5c9db5fe15",
+   "size": 1116
+  },
+  {
+   "path": "datasets/attack_techniques/T1053.006/linux_services_restart/auditd_proctitle_service_restart.log",
+   "sha256": "915ab50ad7b5cbf4bb435f1e5eed29d37d6e475da0d7ec2e776fd82fb96f3818",
+   "size": 12951
+  },
+  {
+   "path": "datasets/attack_techniques/T1068/linux_auditd_copy_fail/linux_auditd.log",
+   "sha256": "9311e1e79cbbfdd2ff8c626c581832663263fe1c5cd2db2fb86a66be95749a03",
+   "size": 78230
+  },
+  {
+   "path": "datasets/attack_techniques/T1068/linux_pedit/linux_auditd.log",
+   "sha256": "157ce9fb84cff672a094a5d976535a4ab369e3f05a7dbcf98a7b69c17f08c2c9",
+   "size": 307
+  },
+  {
+   "path": "datasets/attack_techniques/T1082/linux_auditd_lsmod/linux_auditd_lsmod.log",
+   "sha256": "e4003e81ed575aebe7dfd0bb0ce7de4b7968e29206592a1b46db80fbaf52b24b",
+   "size": 450
+  },
+  {
+   "path": "datasets/attack_techniques/T1082/linux_auditd_lsmod_new/linux_auditd_new_lsmod.log",
+   "sha256": "abf7f579f94d3e6f0298870555cb985f36e65c29eb9b470b50e1d1f94ed54a9a",
+   "size": 355
+  },
+  {
+   "path": "datasets/attack_techniques/T1083/linux_auditd_find_db/linux_auditd_find_db.log",
+   "sha256": "75b966d793aa00b6ab7df0ad35964b7a1cc9afca230942640ef12a09a50925b3",
+   "size": 2383
+  },
+  {
+   "path": "datasets/attack_techniques/T1083/linux_auditd_find_document/auditd_execve_file_dir_discovery.log",
+   "sha256": "bb5c8a5ff93ec2b5606c95f5ea6f0f0fe02450c424263bde43df5b0347b1dbce",
+   "size": 24628
+  },
+  {
+   "path": "datasets/attack_techniques/T1083/linux_auditd_find_document/linux_auditd_find_document.log",
+   "sha256": "55fa7daac007ece847f8dac8804732e0829782dc25096cb6bdc9a76fdc64a14d",
+   "size": 5645
+  },
+  {
+   "path": "datasets/attack_techniques/T1083/linux_auditd_find_virtual_disk/auditd_execve_find_vhd.log",
+   "sha256": "c9563e19e0f5611caf878855d1a0b33cf5d7f08484c5cfe733306e8ff2707387",
+   "size": 2267
+  },
+  {
+   "path": "datasets/attack_techniques/T1083/linux_auditd_find_virtual_disk/linux_auditd_find_virtual_disk.log",
+   "sha256": "f10fde38957559cae8545fa6a961311fdc7943010da01e0486aff60cc7440cb7",
+   "size": 879
+  },
+  {
+   "path": "datasets/attack_techniques/T1083/linux_auditd_hidden_file/auditd_execve_hidden_file.log",
+   "sha256": "382e50e2763bd1f80e539f9fce3ebc11a25574c6aeb0e93cf5b4e12807debc90",
+   "size": 198
+  },
+  {
+   "path": "datasets/attack_techniques/T1083/linux_auditd_hidden_file/linux_auditd_hidden_file.log",
+   "sha256": "768a104f5b14df965637308e2c767b33519fb7565a19d26e4429ba16d63abf76",
+   "size": 192
+  },
+  {
+   "path": "datasets/attack_techniques/T1098.004/auditd_path_ssh_config/path_ssh_config.log",
+   "sha256": "221486c9e0f0e8101de8d8f2198586f3119bf6e6548de6804aa00da26e2ea8e4",
+   "size": 1441
+  },
+  {
+   "path": "datasets/attack_techniques/T1098.004/linux_auditd_nopasswd/linux_auditd_ssh_config.log",
+   "sha256": "311c89f78444a9c1105abef551c4414aba12e09673d12c25d6054781f7bd6176",
+   "size": 918
+  },
+  {
+   "path": "datasets/attack_techniques/T1098.004/linux_auditd_nopasswd/linux_path_ssh_config.log",
+   "sha256": "8bba8bf433dc7a54aa26411092ecc6946e635fd282bffa63f36c2076246bba9c",
+   "size": 227
+  },
+  {
+   "path": "datasets/attack_techniques/T1115/linux_auditd_xclip/linux_auditd_xclip.log",
+   "sha256": "468d823900749e03d37f827d4dd558c84c8c8ebb643a16fdf68dc2fd93599f1c",
+   "size": 280
+  },
+  {
+   "path": "datasets/attack_techniques/T1115/linux_auditd_xclip/linux_auditd_xclip2.log",
+   "sha256": "245dbecaf3a5076c8d3952252fb80a0c6d00114e94c1fa144ecfbe3c793a4188",
+   "size": 268
+  },
+  {
+   "path": "datasets/attack_techniques/T1136.001/linux_auditd_add_user/auditd_proctitle_user_add.log",
+   "sha256": "2c8aa9b3b97046d45ef98ff93b569ab7aa7337f28965a2b08c47ab3850b663a1",
+   "size": 13150
+  },
+  {
+   "path": "datasets/attack_techniques/T1136.001/linux_auditd_add_user/linux_auditd_add_user.log",
+   "sha256": "458c29d6d742cb1777fafd24aeb9b00fbe0396cf2c8623d45b3daf92b9b5783d",
+   "size": 6784
+  },
+  {
+   "path": "datasets/attack_techniques/T1136.001/linux_auditd_add_user_type/linux_auditd_add_user_type.log",
+   "sha256": "02a215dce6d3fe714956104aa529a7a608840f53419b38d69efa1e752d91de82",
+   "size": 243
+  },
+  {
+   "path": "datasets/attack_techniques/T1140/linux_auditd_base64/auditd_execve_base64.log",
+   "sha256": "776ebe4caeb3b8fdf8b54716aebc8337434f9cd9e8d9c7e50a22e539b1ac3f84",
+   "size": 2240
+  },
+  {
+   "path": "datasets/attack_techniques/T1140/linux_auditd_base64/linux_auditd_base64.log",
+   "sha256": "ee6bca5dcdc8766a9ce4b14c7b66c58f448b703d97a5e70cbfe3695c5eea6323",
+   "size": 439
+  },
+  {
+   "path": "datasets/attack_techniques/T1200/linux_auditd_swapoff/linux_auditd_swapoff.log",
+   "sha256": "c5007ebc34ad6ebbf79bc470fefab6c8360bda2e26c500d42c40c578895745d8",
+   "size": 78
+  },
+  {
+   "path": "datasets/attack_techniques/T1200/linux_auditd_swapoff/linux_auditd_swapoff2.log",
+   "sha256": "7fccce1818f30ab35984be83d6c509feb5ce93f8e68e0c173b92949634f3e808",
+   "size": 79
+  },
+  {
+   "path": "datasets/attack_techniques/T1222.002/linux_auditd_chattr_i/auditd_proctitle_chattr.log",
+   "sha256": "7a04bee8117fe563b70b190b7d555671056c6f7e9e6e49c0d4c6c1ff114697ef",
+   "size": 4262
+  },
+  {
+   "path": "datasets/attack_techniques/T1222.002/linux_auditd_chattr_i/linux_auditd_chattr_i.log",
+   "sha256": "9c2fe861e7d984777ee8ed1d6bf38335ca5ad1c0f7f45505634109bc4278ae7e",
+   "size": 86
+  },
+  {
+   "path": "datasets/attack_techniques/T1222.002/linux_auditd_chmod_exec_attrib/auditd_proctitle_chmod.log",
+   "sha256": "6631f0af4bebed6da16499ea456695cabf8f0d40078d49360fa84f40a611e5ff",
+   "size": 362
+  },
+  {
+   "path": "datasets/attack_techniques/T1222.002/linux_auditd_chmod_exec_attrib/linux_auditd_chmod_exec_attrib.log",
+   "sha256": "eccbd9f448e6c22e5e8f15299e86ade743ed5a8dce95b6780c72ce648d412712",
+   "size": 86
+  },
+  {
+   "path": "datasets/attack_techniques/T1485/linux_auditd_dd_overwrite/auditd_proctitle_dd_overwrite.log",
+   "sha256": "23d12d5b34047b15cbb1afcd2dbe37d2a175c19d62cd403fa52fafd5f02002c1",
+   "size": 102
+  },
+  {
+   "path": "datasets/attack_techniques/T1485/linux_auditd_dd_overwrite/linux_auditd_dd_overwrite.log",
+   "sha256": "283af48f6ea43983e8dd2b835a3a90759c234abcc72a7817fccf60a7ffcc37d0",
+   "size": 126
+  },
+  {
+   "path": "datasets/attack_techniques/T1485/linux_auditd_no_preserve_root/auditd_proctitle_rm_rf.log",
+   "sha256": "d8378d294001f47ad1102bb3d6a19f9be2b09c33563d2e8a94eb5c5c4ff420d3",
+   "size": 208
+  },
+  {
+   "path": "datasets/attack_techniques/T1485/linux_auditd_no_preserve_root/linux_auditd_no_preserve_root.log",
+   "sha256": "41c5dfa7f38716d82ebf36295a59c89baa66079b4afbc992fb7560763eead382",
+   "size": 327
+  },
+  {
+   "path": "datasets/attack_techniques/T1485/linux_auditd_shred/auditd_proctitle_shred.log",
+   "sha256": "b56f11257d79b23dda6a48b466e9a4e6ce843e44e8f6256c9989e3154a4eff56",
+   "size": 266
+  },
+  {
+   "path": "datasets/attack_techniques/T1485/linux_auditd_shred/linux_auditd_shred.log",
+   "sha256": "2f161843d58cb9c7e60e33c359fd0481f36174802fb10b21bc92b3b2f981496a",
+   "size": 94
+  },
+  {
+   "path": "datasets/attack_techniques/T1489/linux_auditd_auditd_service_stop/linux_auditd_auditd_service_stop.log",
+   "sha256": "7ee1d10da00560c5e1055f10b1869d6abafd83ad8d0e7bb794c203fff931968c",
+   "size": 1906
+  },
+  {
+   "path": "datasets/attack_techniques/T1489/linux_auditd_osquerd_service_stop/linux_auditd_osquerd_service_stop.log",
+   "sha256": "f45a192703a8b5d79ed28f66d4c91942044f93ceecc3cd3edeb51813c3b58428",
+   "size": 1919
+  },
+  {
+   "path": "datasets/attack_techniques/T1489/linux_auditd_service_stop/linux_auditd_service_stop.log",
+   "sha256": "2694c3bd995ba0c49f3e0a92b5988411a5b7439442288a3d22730d77e24fe2be",
+   "size": 235
+  },
+  {
+   "path": "datasets/attack_techniques/T1489/linux_auditd_sysmon_service_stop/linux_auditd_sysmon_service_stop.log",
+   "sha256": "368123d10bcd09ee1f864df5020523c554c72f572e25c1d215633b0cfd9720ec",
+   "size": 1903
+  },
+  {
+   "path": "datasets/attack_techniques/T1529/auditd_path_sysrq/path_sysrq.log",
+   "sha256": "6c4ca9e6150c822cf1b12e8a1090e0f1007b084fb0f8ab0c330d289516f7d823",
+   "size": 523
+  },
+  {
+   "path": "datasets/attack_techniques/T1546.004/linux_auditd_unix_shell_mod_config/linux_auditd_unix_shell_mod_config.log",
+   "sha256": "b02161c0052fad3f8fea4b1c134f5d6b10193492ec3fc156402665e311b69bba",
+   "size": 1537
+  },
+  {
+   "path": "datasets/attack_techniques/T1546.004/linux_auditd_unix_shell_mod_config/linux_path_profile_d.log",
+   "sha256": "c232815151609ba6854ae5e90b08ee8bfb83cf2c75ea783ac28986f92b9d1cba",
+   "size": 655
+  },
+  {
+   "path": "datasets/attack_techniques/T1547.006/linux_auditd_insmod/linux_auditd_insmod.log",
+   "sha256": "147f792277947580082163e324752125d1ecfd7896d9b541d9d02970ca590170",
+   "size": 887
+  },
+  {
+   "path": "datasets/attack_techniques/T1547.006/linux_auditd_insmod_new/linux_auditd_new_insmod.log",
+   "sha256": "f939165e2452c6059498b09a1a5da8be7d26588c68ac022b11402b5010266799",
+   "size": 356
+  },
+  {
+   "path": "datasets/attack_techniques/T1547.006/linux_auditd_modprobe/linux_auditd_modprobe.log",
+   "sha256": "6d4c89ec69099398eaecb9fc559fdb4dc75f6f97f4dc0fe1ae10ad2288c045a3",
+   "size": 1359
+  },
+  {
+   "path": "datasets/attack_techniques/T1547.006/linux_auditd_modprobe_new/linux_auditd_new_modprobe.log",
+   "sha256": "66aefc5e9518639993c9739948451a6593899d63e6ee93b0b685191c02627caf",
+   "size": 358
+  },
+  {
+   "path": "datasets/attack_techniques/T1547.006/linux_auditd_modprobe_unload_module/auditd_execve_modprobe.log",
+   "sha256": "d9ba18feae86b3b66eb3c7ae048b59d926d6739a0a224c2ee650730b05cbdce8",
+   "size": 774
+  },
+  {
+   "path": "datasets/attack_techniques/T1547.006/linux_auditd_modprobe_unload_module/linux_auditd_modprobe_unload_module.log",
+   "sha256": "9e4277a603566ed1ef9599cadd3ec0a3b39da81ed49f2b88e14473b307e23642",
+   "size": 182
+  },
+  {
+   "path": "datasets/attack_techniques/T1547.006/linux_auditd_rmmod/linux_auditd_rmmod.log",
+   "sha256": "1245f630d928509e5fa07d27f6fed37afa523861f5523443cdb050af7b72d484",
+   "size": 899
+  },
+  {
+   "path": "datasets/attack_techniques/T1547.006/linux_auditd_rmmod_new/linux_auditd_new_rmmod.log",
+   "sha256": "e91fbe80f2070c0d70f873469594e82bec126c58dab5e5e678417a78ff08336f",
+   "size": 355
+  },
+  {
+   "path": "datasets/attack_techniques/T1548.001/linux_auditd_setuid/auditd_execve_setcap.log",
+   "sha256": "b56927e1e5472b1eb1d9f7e842077a7253d01fec8d94582958efd6996bb6869d",
+   "size": 434
+  },
+  {
+   "path": "datasets/attack_techniques/T1548.001/linux_auditd_setuid/auditd_proctitle_setuid.log",
+   "sha256": "9934f3739626099b1fb5341ed94eabd149297451d9beb6c4bdb99389881d1718",
+   "size": 2654
+  },
+  {
+   "path": "datasets/attack_techniques/T1548.001/linux_auditd_setuid/linux_auditd_setcap_priv.log",
+   "sha256": "57ceda6e7ff7d610dc310fe50bb62c125188a6d19baff5589b63c6a0633f3ad4",
+   "size": 618
+  },
+  {
+   "path": "datasets/attack_techniques/T1548.001/linux_auditd_setuid/linux_auditd_setuid.log",
+   "sha256": "70488f10b094fe31a42e94c60d58918046fb36d86f6c4981b556a3d7848441d7",
+   "size": 1410
+  },
+  {
+   "path": "datasets/attack_techniques/T1548.003/auditd_path_cwd_doas_conf/path_doas.log",
+   "sha256": "42b3a666077a4b1f6335788d5cc3d358b6a9e83c8cf2ef3f309f9727bed6fa0a",
+   "size": 1206
+  },
+  {
+   "path": "datasets/attack_techniques/T1548.003/auditd_path_sudoers/path_sudoers.log",
+   "sha256": "31daf0628fc00efcb59f410b9376b6f9220d12eac5137bd58eee91a97b2c22cc",
+   "size": 765
+  },
+  {
+   "path": "datasets/attack_techniques/T1548.003/linux_auditd_doas/linux_auditd_doas.log",
+   "sha256": "6f47fa76dfbb1c666d0866d13b3399f7de692fae19d723ac468cbf31c523184c",
+   "size": 4671
+  },
+  {
+   "path": "datasets/attack_techniques/T1548.003/linux_auditd_doas_new/linux_auditd_new_doas.log",
+   "sha256": "4fb92111f170a7d99ce7e151a1a99edd3d99510b0c7f44735a8f6dd9fcc352e0",
+   "size": 2906
+  },
+  {
+   "path": "datasets/attack_techniques/T1548.003/linux_auditd_nopasswd/linux_auditd_nopasswd.log",
+   "sha256": "c46630dc6902cf3f4ba09fec417327d70f0670b6dc40dd460938ee054bef941b",
+   "size": 266
+  },
+  {
+   "path": "datasets/attack_techniques/T1548.003/linux_auditd_nopasswd/linux_auditd_nopasswd2.log",
+   "sha256": "e972c9035a39ee1eb85b9f2b3e7d1fd3d3603714005e34b55e36b1e721b1e117",
+   "size": 109
+  },
+  {
+   "path": "datasets/attack_techniques/T1548.003/linux_auditd_sudo_su/auditd_proctitle_sudo.log",
+   "sha256": "89b3f1cf164dbb0d8d8262ccef3398e510b95531c16bdee58d8c3d90f11d6a10",
+   "size": 691263
+  },
+  {
+   "path": "datasets/attack_techniques/T1548.003/linux_auditd_sudo_su/linux_auditd_sudo_su.log",
+   "sha256": "897cd0434f7c13f27b61bebc9bed66545506bee652c06554ebbbe1a7e21303e1",
+   "size": 14472
+  },
+  {
+   "path": "datasets/attack_techniques/T1548.003/linux_auditd_sudoers_access/linux_auditd_sudoers_access.log",
+   "sha256": "233454c8a67dbaf36d1d8f5402802cbec6a4e18b00a8f6e2dcbffa167ef954cb",
+   "size": 221
+  },
+  {
+   "path": "datasets/attack_techniques/T1548.003/linux_auditd_sudoers_access/linux_path_sudoers.log",
+   "sha256": "66ddf50daa9a4e2fab2548e98f7a82cc9bd3c78d04789f7e5afa1ba54cd66de8",
+   "size": 660
+  },
+  {
+   "path": "datasets/attack_techniques/T1552.004/linux_auditd_find_gpg/auditd_execve_find_gpg.log",
+   "sha256": "c7937b08874c4e368f98e9ee47567953cbc72d51d751db061e5093291ca6739f",
+   "size": 12929
+  },
+  {
+   "path": "datasets/attack_techniques/T1552.004/linux_auditd_find_gpg/linux_auditd_find_gpg.log",
+   "sha256": "e1dcc47d89000df567292e4f2b909caf66cb72d21804f0f490a8773b38bbae57",
+   "size": 1373
+  },
+  {
+   "path": "datasets/attack_techniques/T1552.004/linux_auditd_find_ssh_files/auditd_execve_find_ssh.log",
+   "sha256": "e0173cb75d255d82004af19d065bb4da9515b15679444c200ecc292ff3baa81f",
+   "size": 6030
+  },
+  {
+   "path": "datasets/attack_techniques/T1552.004/linux_auditd_find_ssh_files/linux_auditd_find_ssh_files.log",
+   "sha256": "3e9643cb954549ab14bfd444f69e298e94a4b3b4941900ec71c433908a57d436",
+   "size": 40829
+  },
+  {
+   "path": "datasets/attack_techniques/T1555.005/linux_auditd_find_credentials/auditd_execve_find_creds.log",
+   "sha256": "506f463799ea28a65bed5ce26298f1b6d882f1871a4cee30da2c7dccba757b6b",
+   "size": 99275
+  },
+  {
+   "path": "datasets/attack_techniques/T1555.005/linux_auditd_find_credentials/linux_auditd_find_credentials.log",
+   "sha256": "f4325b3e26ef9bdf073a0a4fe1ff29dec4aa7477b1f51b89b4d49605cc7fd2fa",
+   "size": 60433
+  },
+  {
+   "path": "datasets/attack_techniques/T1555.005/linux_auditd_find_password_db/auditd_execve_pwd_mgr.log",
+   "sha256": "39db8895bc4dca2bd908f9dc09e1a0701c5827f3ee8090c5cb07ca2052f1cc9e",
+   "size": 2926
+  },
+  {
+   "path": "datasets/attack_techniques/T1555.005/linux_auditd_find_password_db/linux_auditd_find_password_db.log",
+   "sha256": "2a5b38630bfe729883ce3023aaf8a5b3b7fda044887c897398717557b401831a",
+   "size": 1095
+  },
+  {
+   "path": "datasets/attack_techniques/T1562.004/linux_auditd_disable_firewall/linux_auditd_disable_firewall.log",
+   "sha256": "a8a78f7b79d3d633336ba6073f7725fe91cd0a7adcc25eeec77b828d865793ba",
+   "size": 242
+  },
+  {
+   "path": "datasets/attack_techniques/T1562.012/auditd_daemon_end/linux_daemon_end.log",
+   "sha256": "3cdf867e571d67baaa6f88269f524f82dd34c101ceca3939b9e8a10f7d47a2db",
+   "size": 348
+  },
+  {
+   "path": "datasets/attack_techniques/T1562.012/auditd_daemon_type/linux_auditd_daemon.log",
+   "sha256": "711ee340179d64281c7d018b1aea954b17d68bfc4baf557adb0c39d6996de4c6",
+   "size": 11762
+  },
+  {
+   "path": "datasets/attack_techniques/T1564.001/linux_auditd_hidden_file/linux_auditd_hidden_file.log",
+   "sha256": "768a104f5b14df965637308e2c767b33519fb7565a19d26e4429ba16d63abf76",
+   "size": 192
+  },
+  {
+   "path": "datasets/attack_techniques/T1569.002/linux_service_start/auditd_proctitle_service_start.log",
+   "sha256": "c9d8fbd9884d75b4b630bf9f1012765fce5747243f5140eeb7a71d264043d2c3",
+   "size": 21703
+  },
+  {
+   "path": "datasets/attack_techniques/T1574.006/auditd_path_preload_file/path_preload.log",
+   "sha256": "bf0e1802bdc54ca88f641f7e33088f48596afd026d4955bc52a0d8b6c5c720f3",
+   "size": 1488
+  },
+  {
+   "path": "datasets/attack_techniques/T1574.006/linux_auditd_ldpreload/auditd_execve_ldpreload.log",
+   "sha256": "0f15d8f4ab478fced636deb40670b193093eda718d7ffea88b267e1aec3c91ed",
+   "size": 326
+  },
+  {
+   "path": "datasets/attack_techniques/T1574.006/linux_auditd_ldpreload/linux_auditd_ldpreload.log",
+   "sha256": "d099d0ad3048d26db17cd8060a6aceb66ae2b53cb58f165424a848dfa8bf1b00",
+   "size": 103
+  },
+  {
+   "path": "datasets/attack_techniques/T1574.006/linux_auditd_preload_file/linux_auditd_preload_file.log",
+   "sha256": "b32a15ad4eea8121f58e95d0997f9e6d4b922e2c9ea1ea6441ba898768a476c7",
+   "size": 1365
+  },
+  {
+   "path": "datasets/attack_techniques/T1574.006/linux_auditd_preload_file/linux_path_preload.log",
+   "sha256": "81fb829014c6a0a08024a304c9f25ae5380054b5060e3768ffeb31b664566d08",
+   "size": 227
+  }
+ ]
+}

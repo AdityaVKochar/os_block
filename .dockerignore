@@ -1,0 +1,8 @@
+.git
+.test-temp
+.pytest_cache
+**/__pycache__
+audit-data*
+datasets/raw
+results
+project-documents
