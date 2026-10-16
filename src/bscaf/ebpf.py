@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 import os
 import queue
 import shutil
+import signal
 import subprocess
 import tempfile
 import threading
@@ -36,6 +37,7 @@ SYSCALL_SPECS: dict[str, tuple[str, str]] = {
     "execve": ("@a1[curtask->pid] = str(args->filename);", "exec"),
     "execveat": ("@a1[curtask->pid] = str(args->filename);", "exec"),
     "openat": ("@a1[curtask->pid] = str(args->filename); @n1[curtask->pid] = args->flags;", "open"),
+    "unlink": ("@a1[curtask->pid] = str(args->pathname);", "path"),
     "unlinkat": ("@a1[curtask->pid] = str(args->pathname);", "path"),
     "rename": ("@a1[curtask->pid] = str(args->oldname); @a2[curtask->pid] = str(args->newname);", "rename"),
     "renameat2": ("@a1[curtask->pid] = str(args->oldname); @a2[curtask->pid] = str(args->newname);", "rename"),
@@ -58,7 +60,7 @@ O_CREAT, O_TRUNC = 0o100, 0o1000
 
 
 def bpftrace_program(syscalls: Iterable[str] = DEFAULT_EBPF_SYSCALLS) -> str:
-    """bpftrace source; positional $1 is the collector's PID so its own I/O is not traced."""
+    """bpftrace source; positional $1 is the collector's kernel PID so its own I/O is not traced."""
     self_filter = '(uint64)curtask->tgid != $1 && comm != "bpftrace"'
     lines = ["config = { max_strlen = 256 }"]
     for name in syscalls:
@@ -84,6 +86,37 @@ def bpftrace_program(syscalls: Iterable[str] = DEFAULT_EBPF_SYSCALLS) -> str:
             f"delete(@s[curtask->pid]); delete(@n1[curtask->pid]); delete(@n2[curtask->pid]); {cleanup} }}"
         )
     return "\n".join(lines) + "\n"
+
+
+def kernel_tgid(bpftrace: str = "bpftrace", timeout: float = 20.0) -> int:
+    """This process's PID as the kernel sees it (root PID namespace).
+
+    Inside a container, os.getpid() is namespace-local while curtask->tgid in a
+    probe is the kernel's ID, so the collector learns its own ID by opening a
+    marker path while a one-shot probe reports who opened it.
+    """
+    marker = f"/tmp/bscaf-self-{os.getpid()}-{time.time_ns()}"
+    probe = f'tracepoint:syscalls:sys_enter_openat /str(args->filename) == "{marker}"/ {{ printf("%d\\n", curtask->tgid); exit(); }}'
+    process = subprocess.Popen([shutil.which(bpftrace) or bpftrace, "-B", "line", "-q", "-e", probe], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    found: list[int] = []
+
+    def read() -> None:
+        line = process.stdout.readline()
+        if line.strip().isdigit():
+            found.append(int(line))
+
+    reader = threading.Thread(target=read, daemon=True)
+    reader.start()
+    deadline = time.monotonic() + timeout
+    while reader.is_alive() and time.monotonic() < deadline:
+        try:
+            os.open(marker, os.O_RDONLY)
+        except FileNotFoundError:
+            pass
+        reader.join(0.2)
+    process.kill()
+    process.wait()
+    return found[0] if found else os.getpid()
 
 
 def _unescape_buf(text: str) -> bytes:
@@ -197,7 +230,7 @@ def capture(
     # bpftrace warnings go to a file: an unread stderr pipe would eventually block the tracer.
     errors_file = tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace")
     process = subprocess.Popen(
-        [executable, "-B", "line", "-q", "-e", bpftrace_program(syscalls), str(os.getpid())],
+        [executable, "-B", "line", "-q", "-e", bpftrace_program(syscalls), str(kernel_tgid(executable))],
         stdout=subprocess.PIPE, stderr=errors_file, text=True, errors="replace",
     )
     lines: queue.Queue[str | None] = queue.Queue()
@@ -224,9 +257,14 @@ def capture(
         if on_commit:
             on_commit()
 
+    # SIGTERM ends the capture gracefully: the tracer stops and the last batch is committed.
+    stop = threading.Event()
+    previous_handler = None
+    if threading.current_thread() is threading.main_thread():
+        previous_handler = signal.signal(signal.SIGTERM, lambda *_: stop.set())
     finished = False
     try:
-        while not finished and (deadline is None or time.monotonic() < deadline):
+        while not finished and not stop.is_set() and (deadline is None or time.monotonic() < deadline):
             try:
                 line = lines.get(timeout=0.25)
             except queue.Empty:
@@ -262,6 +300,8 @@ def capture(
         service.flush()
         if on_commit:
             on_commit()
+        if previous_handler is not None:
+            signal.signal(signal.SIGTERM, previous_handler)
     errors_file.seek(0)
     errors = errors_file.read()
     errors_file.close()
