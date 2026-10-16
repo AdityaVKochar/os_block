@@ -1,0 +1,570 @@
+{
+  "generated": "2026-10-16 10:29 UTC",
+  "environment": {
+    "python": "3.12.15",
+    "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.41"
+  },
+  "dataset": {
+    "commit": "4389fa7a4e74a7c083c0fbe448fa2c7c32378981",
+    "files": 100,
+    "bytes": 1482016
+  },
+  "ingest": {
+    "default": {
+      "files": 100,
+      "files_failed": [],
+      "accepted": 443,
+      "ignored_by_policy": 230,
+      "invalid_events": {},
+      "checkpoints_created": 59,
+      "duplicates_skipped": 0,
+      "records": {
+        "PROCTITLE": 5299,
+        "SYSCALL": 976,
+        "EXECVE": 698,
+        "CWD": 20,
+        "PATH": 148,
+        "ADD_USER": 1,
+        "SERVICE_STOP": 26,
+        "DAEMON_END": 6,
+        "DAEMON_START": 13,
+        "DAEMON_ABORT": 10
+      },
+      "rejected": {},
+      "orphan_records": 5861,
+      "duplicate_syscall_records": 303,
+      "conflicting_duplicate_records": 0,
+      "unresolved_user_names": 343,
+      "unmapped_syscalls": {}
+    },
+    "all_syscalls": {
+      "files": 100,
+      "files_failed": [],
+      "accepted": 673,
+      "ignored_by_policy": 0,
+      "invalid_events": {},
+      "checkpoints_created": 81,
+      "duplicates_skipped": 0,
+      "records": {
+        "PROCTITLE": 5299,
+        "SYSCALL": 976,
+        "EXECVE": 698,
+        "CWD": 20,
+        "PATH": 148,
+        "ADD_USER": 1,
+        "SERVICE_STOP": 26,
+        "DAEMON_END": 6,
+        "DAEMON_START": 13,
+        "DAEMON_ABORT": 10
+      },
+      "rejected": {},
+      "orphan_records": 5861,
+      "duplicate_syscall_records": 303,
+      "conflicting_duplicate_records": 0,
+      "unresolved_user_names": 343,
+      "unmapped_syscalls": {}
+    }
+  },
+  "syscalls": {
+    "default": {
+      "connect": 16,
+      "execve": 53,
+      "openat": 325,
+      "fchmod": 2,
+      "rename": 3,
+      "bind": 40,
+      "finit_module": 1,
+      "delete_module": 1,
+      "chown": 2
+    },
+    "all": {
+      "socket": 66,
+      "connect": 16,
+      "execve": 53,
+      "getsockopt": 4,
+      "openat": 325,
+      "fchmod": 2,
+      "rename": 3,
+      "bind": 40,
+      "setsockopt": 80,
+      "splice": 80,
+      "finit_module": 1,
+      "delete_module": 1,
+      "chown": 2
+    }
+  },
+  "verify": {
+    "default policy": {
+      "valid": true,
+      "verdict": "pass",
+      "events_checked": 443,
+      "checkpoints_checked": 60,
+      "first_problem": null,
+      "problems": [],
+      "warnings": []
+    },
+    "all policy": {
+      "valid": true,
+      "verdict": "pass",
+      "events_checked": 673,
+      "checkpoints_checked": 82,
+      "first_problem": null,
+      "problems": [],
+      "warnings": []
+    }
+  },
+  "proofs": [
+    {
+      "sequence": 26,
+      "syscall": "execve",
+      "path_length": 4,
+      "valid": true
+    },
+    {
+      "sequence": 115,
+      "syscall": "openat",
+      "path_length": 4,
+      "valid": true
+    },
+    {
+      "sequence": 251,
+      "syscall": "openat",
+      "path_length": 4,
+      "valid": true
+    },
+    {
+      "sequence": 282,
+      "syscall": "openat",
+      "path_length": 4,
+      "valid": true
+    },
+    {
+      "sequence": 655,
+      "syscall": "execve",
+      "path_length": 4,
+      "valid": true
+    }
+  ],
+  "witnesses": {
+    "replicate": {
+      "blocks": 82,
+      "witnesses_complete": 3,
+      "quorum_met": true,
+      "new_acks": 246
+    },
+    "all witnesses online": {
+      "verdict": "pass",
+      "complete_witnesses": 3,
+      "warnings": [],
+      "notices": []
+    },
+    "one witness offline": {
+      "verdict": "pass",
+      "complete_witnesses": 2,
+      "warnings": [],
+      "notices": [
+        "witness-unavailable"
+      ]
+    },
+    "two witnesses offline": {
+      "verdict": "partial",
+      "complete_witnesses": 1,
+      "warnings": [
+        "witness-quorum",
+        "witness-unavailable"
+      ],
+      "notices": []
+    }
+  },
+  "attacks": [
+    {
+      "scenario": "baseline",
+      "description": "untampered copy",
+      "expected": "pass",
+      "local_verdict": "pass",
+      "local_problems": [],
+      "witness_verdict": "pass",
+      "witness_problems": [],
+      "witness_warnings": [],
+      "detected_by": "-",
+      "as_expected": true
+    },
+    {
+      "scenario": "modify-event",
+      "description": "change one committed event's system call",
+      "expected": "local",
+      "local_verdict": "fail",
+      "local_problems": [
+        "event-hash",
+        "event-link",
+        "merkle-root"
+      ],
+      "witness_verdict": "fail",
+      "witness_problems": [],
+      "witness_warnings": [],
+      "detected_by": "local",
+      "as_expected": true
+    },
+    {
+      "scenario": "delete-event",
+      "description": "remove one committed event",
+      "expected": "local",
+      "local_verdict": "fail",
+      "local_problems": [
+        "batch-count",
+        "event-link",
+        "event-sequence"
+      ],
+      "witness_verdict": "fail",
+      "witness_problems": [],
+      "witness_warnings": [],
+      "detected_by": "local",
+      "as_expected": true
+    },
+    {
+      "scenario": "insert-event",
+      "description": "insert a forged, correctly hashed event",
+      "expected": "local",
+      "local_verdict": "fail",
+      "local_problems": [
+        "batch-count",
+        "event-link",
+        "event-sequence"
+      ],
+      "witness_verdict": "fail",
+      "witness_problems": [],
+      "witness_warnings": [],
+      "detected_by": "local",
+      "as_expected": true
+    },
+    {
+      "scenario": "reorder-events",
+      "description": "swap two adjacent committed events",
+      "expected": "local",
+      "local_verdict": "fail",
+      "local_problems": [
+        "event-link",
+        "event-sequence",
+        "merkle-root"
+      ],
+      "witness_verdict": "fail",
+      "witness_problems": [],
+      "witness_warnings": [],
+      "detected_by": "local",
+      "as_expected": true
+    },
+    {
+      "scenario": "modify-merkle-root",
+      "description": "replace a stored batch Merkle root",
+      "expected": "local",
+      "local_verdict": "fail",
+      "local_problems": [
+        "block-hash",
+        "merkle-root",
+        "signature"
+      ],
+      "witness_verdict": "fail",
+      "witness_problems": [],
+      "witness_warnings": [],
+      "detected_by": "local",
+      "as_expected": true
+    },
+    {
+      "scenario": "replay-old-batch",
+      "description": "append a copy of an old signed checkpoint",
+      "expected": "local",
+      "local_verdict": "fail",
+      "local_problems": [
+        "block-link",
+        "block-number",
+        "replay"
+      ],
+      "witness_verdict": "fail",
+      "witness_problems": [],
+      "witness_warnings": [
+        "unwitnessed-blocks",
+        "witness-quorum"
+      ],
+      "detected_by": "local",
+      "as_expected": true
+    },
+    {
+      "scenario": "truncate-tail",
+      "description": "delete the newest block and its events",
+      "expected": "witness",
+      "local_verdict": "pass",
+      "local_problems": [],
+      "witness_verdict": "fail",
+      "witness_problems": [
+        "truncation"
+      ],
+      "witness_warnings": [
+        "witness-quorum"
+      ],
+      "detected_by": "witness",
+      "as_expected": true
+    },
+    {
+      "scenario": "rewrite-and-resign",
+      "description": "edit history and re-sign every block with the stolen source key",
+      "expected": "witness",
+      "local_verdict": "pass",
+      "local_problems": [],
+      "witness_verdict": "fail",
+      "witness_problems": [
+        "witness-mismatch"
+      ],
+      "witness_warnings": [
+        "under-witnessed",
+        "witness-quorum"
+      ],
+      "detected_by": "witness",
+      "as_expected": true,
+      "witnesses_rejected_rewritten_blocks": true
+    },
+    {
+      "scenario": "forge-ack",
+      "description": "alter a stored witness acknowledgement",
+      "expected": "witness",
+      "local_verdict": "pass",
+      "local_problems": [],
+      "witness_verdict": "fail",
+      "witness_problems": [
+        "forged-ack"
+      ],
+      "witness_warnings": [],
+      "detected_by": "witness",
+      "as_expected": true
+    },
+    {
+      "scenario": "witness-offline",
+      "description": "one witness unreachable; quorum still met",
+      "expected": "pass",
+      "local_verdict": "pass",
+      "local_problems": [],
+      "witness_verdict": "pass",
+      "witness_problems": [],
+      "witness_warnings": [],
+      "detected_by": "-",
+      "as_expected": true
+    },
+    {
+      "scenario": "witness-quorum-lost",
+      "description": "witnesses unreachable below quorum",
+      "expected": "partial",
+      "local_verdict": "pass",
+      "local_problems": [],
+      "witness_verdict": "partial",
+      "witness_problems": [],
+      "witness_warnings": [
+        "witness-quorum",
+        "witness-unavailable"
+      ],
+      "detected_by": "-",
+      "as_expected": true
+    }
+  ],
+  "bench": {
+    "events": 100000,
+    "results": [
+      {
+        "label": "plain log",
+        "mode": "plain",
+        "batch_size": 100,
+        "fsync": false,
+        "batch_seconds": null,
+        "events": 100000,
+        "events_per_second": 54412.52556662658,
+        "latency_us_median": 15.18399994893116,
+        "latency_us_p95": 31.148000289249467,
+        "latency_us_p99": 60.14500013407087,
+        "commit_delay_ms_median": null,
+        "commit_delay_ms_p95": null,
+        "cpu_percent_of_wall": 99.96032570551505,
+        "peak_rss_mb": 80.7109375,
+        "rss_growth_mb": 8.0,
+        "bytes_per_event": 331.6933,
+        "ingest_seconds": 1.837812139000107,
+        "ingest_cpu_seconds": 1.8370829999999998
+      },
+      {
+        "label": "hash chain only",
+        "mode": "hash-chain",
+        "batch_size": 100,
+        "fsync": false,
+        "batch_seconds": null,
+        "events": 100000,
+        "events_per_second": 20199.83819509493,
+        "latency_us_median": 40.99400007362419,
+        "latency_us_p95": 85.64200015825918,
+        "latency_us_p99": 140.9080000485119,
+        "commit_delay_ms_median": null,
+        "commit_delay_ms_p95": null,
+        "cpu_percent_of_wall": 99.93859847104119,
+        "peak_rss_mb": 81.3984375,
+        "rss_growth_mb": 8.0,
+        "bytes_per_event": 517.58225,
+        "ingest_seconds": 4.950534703999892,
+        "ingest_cpu_seconds": 4.947495,
+        "verify_seconds": 2.3512553160003336
+      },
+      {
+        "label": "B-SCAF N=10",
+        "mode": "bscaf",
+        "batch_size": 10,
+        "fsync": false,
+        "batch_seconds": null,
+        "events": 100000,
+        "events_per_second": 13053.985774422705,
+        "latency_us_median": 34.47800008871127,
+        "latency_us_p95": 347.858000168344,
+        "latency_us_p99": 572.9500003326393,
+        "commit_delay_ms_median": 0.5216165002366324,
+        "commit_delay_ms_p95": 1.0214689996246307,
+        "cpu_percent_of_wall": 99.91618616636447,
+        "peak_rss_mb": 112.51953125,
+        "rss_growth_mb": 39.4921875,
+        "bytes_per_event": 585.71985,
+        "ingest_seconds": 7.660495555000125,
+        "ingest_cpu_seconds": 7.654075000000001,
+        "blocks": 10000,
+        "verify_seconds": 4.618132565999986,
+        "verify_verdict": "pass",
+        "proof_export_seconds": 1.6817455089999385,
+        "proof_valid": true,
+        "proof_verify_seconds": 0.0003653980002127355,
+        "batch_verify_seconds": 1.0139047709999431
+      },
+      {
+        "label": "B-SCAF N=100",
+        "mode": "bscaf",
+        "batch_size": 100,
+        "fsync": false,
+        "batch_seconds": null,
+        "events": 100000,
+        "events_per_second": 18515.883745978346,
+        "latency_us_median": 31.414000204676995,
+        "latency_us_p95": 65.81300021935022,
+        "latency_us_p99": 1386.4540001122805,
+        "commit_delay_ms_median": 3.3228839999992488,
+        "commit_delay_ms_p95": 5.944040000031237,
+        "cpu_percent_of_wall": 99.91054219262315,
+        "peak_rss_mb": 98.9453125,
+        "rss_growth_mb": 25.8828125,
+        "bytes_per_event": 524.3898,
+        "ingest_seconds": 5.400768409000193,
+        "ingest_cpu_seconds": 5.395937,
+        "blocks": 1000,
+        "verify_seconds": 2.821189396999671,
+        "verify_verdict": "pass",
+        "proof_export_seconds": 1.5782281460001286,
+        "proof_valid": true,
+        "proof_verify_seconds": 0.00036981399989599595,
+        "batch_verify_seconds": 0.9694197260000692,
+        "replicate_seconds": 5.0848248280003645,
+        "replicate_quorum_met": true
+      },
+      {
+        "label": "B-SCAF N=1000",
+        "mode": "bscaf",
+        "batch_size": 1000,
+        "fsync": false,
+        "batch_seconds": null,
+        "events": 100000,
+        "events_per_second": 19684.125759281047,
+        "latency_us_median": 30.68999967581476,
+        "latency_us_p95": 63.25799995465786,
+        "latency_us_p99": 98.80699963105144,
+        "commit_delay_ms_median": 31.869650499857016,
+        "commit_delay_ms_p95": 49.963781000315066,
+        "cpu_percent_of_wall": 99.90831565304019,
+        "peak_rss_mb": 97.64453125,
+        "rss_growth_mb": 24.65625,
+        "bytes_per_event": 518.25675,
+        "ingest_seconds": 5.080235780999828,
+        "ingest_cpu_seconds": 5.075578,
+        "blocks": 100,
+        "verify_seconds": 2.5582272609999563,
+        "verify_verdict": "pass",
+        "proof_export_seconds": 1.5876569039996866,
+        "proof_valid": true,
+        "proof_verify_seconds": 0.00041305700005977997,
+        "batch_verify_seconds": 1.0692747630000667
+      },
+      {
+        "label": "B-SCAF T=0.05s",
+        "mode": "bscaf",
+        "batch_size": 1000000,
+        "fsync": false,
+        "batch_seconds": 0.05,
+        "events": 100000,
+        "events_per_second": 16864.52672457734,
+        "latency_us_median": 33.06999997221283,
+        "latency_us_p95": 75.22399982917705,
+        "latency_us_p99": 870.8299997124413,
+        "commit_delay_ms_median": 1.8648534999101685,
+        "commit_delay_ms_p95": 3.690635000111797,
+        "cpu_percent_of_wall": 99.78737090027066,
+        "peak_rss_mb": 100.9375,
+        "rss_growth_mb": 28.26171875,
+        "bytes_per_event": 531.19536,
+        "ingest_seconds": 5.9296060679998845,
+        "ingest_cpu_seconds": 5.9169979999999995,
+        "blocks": 2000,
+        "verify_seconds": 2.934144059999653,
+        "verify_verdict": "pass",
+        "proof_export_seconds": 1.7400857019997602,
+        "proof_valid": true,
+        "proof_verify_seconds": 0.0004260790001353598,
+        "batch_verify_seconds": 1.0136252460001742
+      },
+      {
+        "label": "plain log + fsync/100",
+        "mode": "plain",
+        "batch_size": 100,
+        "fsync": true,
+        "batch_seconds": null,
+        "events": 100000,
+        "events_per_second": 16182.299698413728,
+        "latency_us_median": 16.79599972703727,
+        "latency_us_p95": 48.84200006927131,
+        "latency_us_p99": 2632.839000398235,
+        "commit_delay_ms_median": null,
+        "commit_delay_ms_p95": null,
+        "cpu_percent_of_wall": 38.5951084267107,
+        "peak_rss_mb": 80.7578125,
+        "rss_growth_mb": 7.625,
+        "bytes_per_event": 331.6933,
+        "ingest_seconds": 6.179591397000422,
+        "ingest_cpu_seconds": 2.3850199999999995
+      },
+      {
+        "label": "B-SCAF N=100 + fsync",
+        "mode": "bscaf",
+        "batch_size": 100,
+        "fsync": true,
+        "batch_seconds": null,
+        "events": 100000,
+        "events_per_second": 7161.447871231943,
+        "latency_us_median": 33.618000088608824,
+        "latency_us_p95": 82.99599994643359,
+        "latency_us_p99": 3237.730999899213,
+        "commit_delay_ms_median": 11.274374999857173,
+        "commit_delay_ms_p95": 15.933623999899282,
+        "cpu_percent_of_wall": 47.65740173185315,
+        "peak_rss_mb": 98.84375,
+        "rss_growth_mb": 25.6328125,
+        "bytes_per_event": 524.3898,
+        "ingest_seconds": 13.963656763000017,
+        "ingest_cpu_seconds": 6.654716,
+        "blocks": 1000,
+        "verify_seconds": 2.7131801959999393,
+        "verify_verdict": "pass",
+        "proof_export_seconds": 1.5054104149999148,
+        "proof_valid": true,
+        "proof_verify_seconds": 0.00041109999983746093,
+        "batch_verify_seconds": 1.2532055140000011
+      }
+    ]
+  }
+}

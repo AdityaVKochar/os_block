@@ -23,10 +23,11 @@ BLACK = RGBColor(0, 0, 0)
 
 
 def find_font(size: int, bold: bool = False):
-    candidates = [
-        Path(r"C:\Windows\Fonts\timesbd.ttf" if bold else r"C:\Windows\Fonts\times.ttf"),
-        Path(r"C:\Windows\Fonts\arialbd.ttf" if bold else r"C:\Windows\Fonts\arial.ttf"),
-    ]
+    names = ["timesbd.ttf", "arialbd.ttf"] if bold else ["times.ttf", "arial.ttf"]
+    # Windows, a Windows font folder mounted at /fonts (container builds) or WSL's view of it.
+    folders = [Path(r"C:\Windows\Fonts"), Path("/fonts"), Path("/mnt/c/Windows/Fonts")]
+    candidates = [folder / name for name in names for folder in folders]
+    candidates.append(Path("/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf"))
     for candidate in candidates:
         if candidate.exists():
             return ImageFont.truetype(str(candidate), size=size)

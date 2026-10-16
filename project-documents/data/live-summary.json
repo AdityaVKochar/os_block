@@ -1,0 +1,604 @@
+{
+  "generated": "2026-10-16 10:28 UTC",
+  "kernel": "6.18.54.1-microsoft-standard-WSL2",
+  "iterations": 1000,
+  "runs": 3,
+  "phases": {
+    "baseline": [
+      {
+        "pid": 14457,
+        "iterations": 1000,
+        "seconds": 1.115387372999976,
+        "workdir": "/tmp/bscaf-workload-i565zxs_",
+        "port": 33355,
+        "expected": {
+          "openat (create)": 1000,
+          "rename": 1000,
+          "chmod": 1000,
+          "unlink": 1000,
+          "execve": 1000,
+          "connect": 1000
+        }
+      },
+      {
+        "pid": 15459,
+        "iterations": 1000,
+        "seconds": 0.9874753680001049,
+        "workdir": "/tmp/bscaf-workload-cq7vxvwf",
+        "port": 51031,
+        "expected": {
+          "openat (create)": 1000,
+          "rename": 1000,
+          "chmod": 1000,
+          "unlink": 1000,
+          "execve": 1000,
+          "connect": 1000
+        }
+      },
+      {
+        "pid": 16461,
+        "iterations": 1000,
+        "seconds": 1.268347126000208,
+        "workdir": "/tmp/bscaf-workload-3vyb4a_x",
+        "port": 49347,
+        "expected": {
+          "openat (create)": 1000,
+          "rename": 1000,
+          "chmod": 1000,
+          "unlink": 1000,
+          "execve": 1000,
+          "connect": 1000
+        }
+      }
+    ],
+    "tracing only": [
+      {
+        "pid": 17474,
+        "iterations": 1000,
+        "seconds": 1.4691321200002676,
+        "workdir": "/tmp/bscaf-workload-50w0p7qm",
+        "port": 54239,
+        "expected": {
+          "openat (create)": 1000,
+          "rename": 1000,
+          "chmod": 1000,
+          "unlink": 1000,
+          "execve": 1000,
+          "connect": 1000
+        },
+        "collector_cpu_seconds": 0.25
+      },
+      {
+        "pid": 18486,
+        "iterations": 1000,
+        "seconds": 1.3650645900002019,
+        "workdir": "/tmp/bscaf-workload-r5gjdt9l",
+        "port": 57423,
+        "expected": {
+          "openat (create)": 1000,
+          "rename": 1000,
+          "chmod": 1000,
+          "unlink": 1000,
+          "execve": 1000,
+          "connect": 1000
+        },
+        "collector_cpu_seconds": 0.24
+      },
+      {
+        "pid": 19498,
+        "iterations": 1000,
+        "seconds": 1.423061387999951,
+        "workdir": "/tmp/bscaf-workload-jsjieoxq",
+        "port": 59647,
+        "expected": {
+          "openat (create)": 1000,
+          "rename": 1000,
+          "chmod": 1000,
+          "unlink": 1000,
+          "execve": 1000,
+          "connect": 1000
+        },
+        "collector_cpu_seconds": 0.26
+      }
+    ],
+    "B-SCAF": [
+      {
+        "pid": 20536,
+        "iterations": 1000,
+        "seconds": 1.464878821000184,
+        "workdir": "/tmp/bscaf-workload-muvhwjh8",
+        "port": 49521,
+        "expected": {
+          "openat (create)": 1000,
+          "rename": 1000,
+          "chmod": 1000,
+          "unlink": 1000,
+          "execve": 1000,
+          "connect": 1000
+        },
+        "collector_cpu_seconds": 1.3800000000000003,
+        "collector": {
+          "accepted": 8744,
+          "ignored_by_policy": 0,
+          "checkpoints_created": 6,
+          "policy_version": "bd233301bec8a927",
+          "records": {
+            "openat": 3692,
+            "execve": 1004,
+            "unlink": 1003,
+            "rename": 1000,
+            "chmod": 1000,
+            "connect": 1000,
+            "setresuid": 36,
+            "unlinkat": 8,
+            "bind": 1
+          },
+          "rejected": {},
+          "lost_events": 198,
+          "replication": {
+            "blocks": 6,
+            "witnesses_complete": 3,
+            "quorum_met": true
+          }
+        },
+        "verify_local": "pass",
+        "verify_witnesses": "pass",
+        "witness_quorum": {
+          "required": 2,
+          "complete": 3,
+          "met": true
+        },
+        "events": 8744,
+        "blocks": 6,
+        "completeness": {
+          "by_syscall": {
+            "openat (create)": {
+              "expected": 1000,
+              "captured": 1000
+            },
+            "rename": {
+              "expected": 1000,
+              "captured": 1000
+            },
+            "chmod": {
+              "expected": 1000,
+              "captured": 1000
+            },
+            "unlink": {
+              "expected": 1000,
+              "captured": 1000
+            },
+            "execve": {
+              "expected": 1000,
+              "captured": 1000
+            },
+            "connect": {
+              "expected": 1000,
+              "captured": 1000
+            }
+          },
+          "expected": 6000,
+          "captured": 6000,
+          "ratio": 1.0,
+          "workload_kernel_pid": 6636,
+          "collector_self_events": 18
+        },
+        "commit_delay_ms_median": 668.485,
+        "commit_delay_ms_p95": 1178.702,
+        "syscalls": {
+          "openat": 3692,
+          "execve": 1004,
+          "unlink": 1003,
+          "rename": 1000,
+          "chmod": 1000,
+          "connect": 1000,
+          "setresuid": 36,
+          "unlinkat": 8,
+          "bind": 1
+        },
+        "store_bytes": 4269383
+      },
+      {
+        "pid": 21615,
+        "iterations": 1000,
+        "seconds": 1.3479491269999926,
+        "workdir": "/tmp/bscaf-workload-dqauzrhh",
+        "port": 38519,
+        "expected": {
+          "openat (create)": 1000,
+          "rename": 1000,
+          "chmod": 1000,
+          "unlink": 1000,
+          "execve": 1000,
+          "connect": 1000
+        },
+        "collector_cpu_seconds": 1.2699999999999996,
+        "collector": {
+          "accepted": 8947,
+          "ignored_by_policy": 0,
+          "checkpoints_created": 6,
+          "policy_version": "bd233301bec8a927",
+          "records": {
+            "openat": 3867,
+            "execve": 1028,
+            "connect": 1002,
+            "unlink": 1001,
+            "rename": 1000,
+            "chmod": 1000,
+            "setresuid": 36,
+            "unlinkat": 12,
+            "bind": 1
+          },
+          "rejected": {
+            "unrecognized collector line": 3
+          },
+          "lost_events": 0,
+          "replication": {
+            "blocks": 6,
+            "witnesses_complete": 3,
+            "quorum_met": true
+          }
+        },
+        "verify_local": "pass",
+        "verify_witnesses": "pass",
+        "witness_quorum": {
+          "required": 2,
+          "complete": 3,
+          "met": true
+        },
+        "events": 8947,
+        "blocks": 6,
+        "completeness": {
+          "by_syscall": {
+            "openat (create)": {
+              "expected": 1000,
+              "captured": 1000
+            },
+            "rename": {
+              "expected": 1000,
+              "captured": 1000
+            },
+            "chmod": {
+              "expected": 1000,
+              "captured": 1000
+            },
+            "unlink": {
+              "expected": 1000,
+              "captured": 1000
+            },
+            "execve": {
+              "expected": 1000,
+              "captured": 1000
+            },
+            "connect": {
+              "expected": 1000,
+              "captured": 1000
+            }
+          },
+          "expected": 6000,
+          "captured": 6000,
+          "ratio": 1.0,
+          "workload_kernel_pid": 7779,
+          "collector_self_events": 16
+        },
+        "commit_delay_ms_median": 416.62,
+        "commit_delay_ms_p95": 1182.644,
+        "syscalls": {
+          "openat": 3867,
+          "execve": 1028,
+          "connect": 1002,
+          "unlink": 1001,
+          "rename": 1000,
+          "chmod": 1000,
+          "setresuid": 36,
+          "unlinkat": 12,
+          "bind": 1
+        },
+        "store_bytes": 4371883
+      },
+      {
+        "pid": 22694,
+        "iterations": 1000,
+        "seconds": 1.3466989000003196,
+        "workdir": "/tmp/bscaf-workload-qq3ewzm3",
+        "port": 51769,
+        "expected": {
+          "openat (create)": 1000,
+          "rename": 1000,
+          "chmod": 1000,
+          "unlink": 1000,
+          "execve": 1000,
+          "connect": 1000
+        },
+        "collector_cpu_seconds": 1.27,
+        "collector": {
+          "accepted": 8924,
+          "ignored_by_policy": 0,
+          "checkpoints_created": 6,
+          "policy_version": "bd233301bec8a927",
+          "records": {
+            "openat": 3847,
+            "execve": 1027,
+            "unlink": 1001,
+            "rename": 1000,
+            "chmod": 1000,
+            "connect": 1000,
+            "setresuid": 36,
+            "unlinkat": 12,
+            "bind": 1
+          },
+          "rejected": {
+            "unrecognized collector line": 3
+          },
+          "lost_events": 0,
+          "replication": {
+            "blocks": 6,
+            "witnesses_complete": 3,
+            "quorum_met": true
+          }
+        },
+        "verify_local": "pass",
+        "verify_witnesses": "pass",
+        "witness_quorum": {
+          "required": 2,
+          "complete": 3,
+          "met": true
+        },
+        "events": 8924,
+        "blocks": 6,
+        "completeness": {
+          "by_syscall": {
+            "openat (create)": {
+              "expected": 1000,
+              "captured": 1000
+            },
+            "rename": {
+              "expected": 1000,
+              "captured": 1000
+            },
+            "chmod": {
+              "expected": 1000,
+              "captured": 1000
+            },
+            "unlink": {
+              "expected": 1000,
+              "captured": 1000
+            },
+            "execve": {
+              "expected": 1000,
+              "captured": 1000
+            },
+            "connect": {
+              "expected": 1000,
+              "captured": 1000
+            }
+          },
+          "expected": 6000,
+          "captured": 6000,
+          "ratio": 1.0,
+          "workload_kernel_pid": 8922,
+          "collector_self_events": 14
+        },
+        "commit_delay_ms_median": 349.405,
+        "commit_delay_ms_p95": 1052.1670000000001,
+        "syscalls": {
+          "openat": 3847,
+          "execve": 1027,
+          "unlink": 1001,
+          "rename": 1000,
+          "chmod": 1000,
+          "connect": 1000,
+          "setresuid": 36,
+          "unlinkat": 12,
+          "bind": 1
+        },
+        "store_bytes": 4359757
+      }
+    ]
+  },
+  "overview": {
+    "baseline": {
+      "workload_seconds": 1.115387372999976,
+      "slowdown_percent": 0.0,
+      "collector_cpu_seconds": 0.0
+    },
+    "tracing only": {
+      "workload_seconds": 1.423061387999951,
+      "slowdown_percent": 27.58449866367473,
+      "collector_cpu_seconds": 0.25
+    },
+    "B-SCAF": {
+      "workload_seconds": 1.3479491269999926,
+      "slowdown_percent": 20.850312602563566,
+      "collector_cpu_seconds": 1.27
+    }
+  },
+  "attacks": [
+    {
+      "scenario": "baseline",
+      "description": "untampered copy",
+      "expected": "pass",
+      "local_verdict": "pass",
+      "local_problems": [],
+      "witness_verdict": "pass",
+      "witness_problems": [],
+      "witness_warnings": [],
+      "detected_by": "-",
+      "as_expected": true
+    },
+    {
+      "scenario": "modify-event",
+      "description": "change one committed event's system call",
+      "expected": "local",
+      "local_verdict": "fail",
+      "local_problems": [
+        "event-hash",
+        "event-link",
+        "merkle-root"
+      ],
+      "witness_verdict": "fail",
+      "witness_problems": [],
+      "witness_warnings": [],
+      "detected_by": "local",
+      "as_expected": true
+    },
+    {
+      "scenario": "delete-event",
+      "description": "remove one committed event",
+      "expected": "local",
+      "local_verdict": "fail",
+      "local_problems": [
+        "batch-count",
+        "event-link",
+        "event-sequence"
+      ],
+      "witness_verdict": "fail",
+      "witness_problems": [],
+      "witness_warnings": [],
+      "detected_by": "local",
+      "as_expected": true
+    },
+    {
+      "scenario": "insert-event",
+      "description": "insert a forged, correctly hashed event",
+      "expected": "local",
+      "local_verdict": "fail",
+      "local_problems": [
+        "batch-count",
+        "event-link",
+        "event-sequence"
+      ],
+      "witness_verdict": "fail",
+      "witness_problems": [],
+      "witness_warnings": [],
+      "detected_by": "local",
+      "as_expected": true
+    },
+    {
+      "scenario": "reorder-events",
+      "description": "swap two adjacent committed events",
+      "expected": "local",
+      "local_verdict": "fail",
+      "local_problems": [
+        "event-link",
+        "event-sequence",
+        "merkle-root"
+      ],
+      "witness_verdict": "fail",
+      "witness_problems": [],
+      "witness_warnings": [],
+      "detected_by": "local",
+      "as_expected": true
+    },
+    {
+      "scenario": "modify-merkle-root",
+      "description": "replace a stored batch Merkle root",
+      "expected": "local",
+      "local_verdict": "fail",
+      "local_problems": [
+        "block-hash",
+        "merkle-root",
+        "signature"
+      ],
+      "witness_verdict": "fail",
+      "witness_problems": [],
+      "witness_warnings": [],
+      "detected_by": "local",
+      "as_expected": true
+    },
+    {
+      "scenario": "replay-old-batch",
+      "description": "append a copy of an old signed checkpoint",
+      "expected": "local",
+      "local_verdict": "fail",
+      "local_problems": [
+        "block-link",
+        "block-number",
+        "replay"
+      ],
+      "witness_verdict": "fail",
+      "witness_problems": [],
+      "witness_warnings": [
+        "unwitnessed-blocks",
+        "witness-quorum"
+      ],
+      "detected_by": "local",
+      "as_expected": true
+    },
+    {
+      "scenario": "truncate-tail",
+      "description": "delete the newest block and its events",
+      "expected": "witness",
+      "local_verdict": "pass",
+      "local_problems": [],
+      "witness_verdict": "fail",
+      "witness_problems": [
+        "truncation"
+      ],
+      "witness_warnings": [
+        "witness-quorum"
+      ],
+      "detected_by": "witness",
+      "as_expected": true
+    },
+    {
+      "scenario": "rewrite-and-resign",
+      "description": "edit history and re-sign every block with the stolen source key",
+      "expected": "witness",
+      "local_verdict": "pass",
+      "local_problems": [],
+      "witness_verdict": "fail",
+      "witness_problems": [
+        "witness-mismatch"
+      ],
+      "witness_warnings": [
+        "under-witnessed",
+        "witness-quorum"
+      ],
+      "detected_by": "witness",
+      "as_expected": true,
+      "witnesses_rejected_rewritten_blocks": true
+    },
+    {
+      "scenario": "forge-ack",
+      "description": "alter a stored witness acknowledgement",
+      "expected": "witness",
+      "local_verdict": "pass",
+      "local_problems": [],
+      "witness_verdict": "fail",
+      "witness_problems": [
+        "forged-ack"
+      ],
+      "witness_warnings": [],
+      "detected_by": "witness",
+      "as_expected": true
+    },
+    {
+      "scenario": "witness-offline",
+      "description": "one witness unreachable; quorum still met",
+      "expected": "pass",
+      "local_verdict": "pass",
+      "local_problems": [],
+      "witness_verdict": "pass",
+      "witness_problems": [],
+      "witness_warnings": [],
+      "detected_by": "-",
+      "as_expected": true
+    },
+    {
+      "scenario": "witness-quorum-lost",
+      "description": "witnesses unreachable below quorum",
+      "expected": "partial",
+      "local_verdict": "pass",
+      "local_problems": [],
+      "witness_verdict": "partial",
+      "witness_problems": [],
+      "witness_warnings": [
+        "witness-quorum",
+        "witness-unavailable"
+      ],
+      "detected_by": "-",
+      "as_expected": true
+    }
+  ]
+}
