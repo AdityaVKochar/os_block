@@ -1,0 +1,11 @@
+A	14565	ls	-la	/etc
+B	execve	14565	14565	14550	0	ls	0	0	0	/usr/bin/ls	
+B	connect	14565	14565	14550	0	ls	-2	0	0	\x01\x00\x2f\x76\x61\x72\x2f\x72\x75\x6e\x2f\x6e\x73\x63\x64\x2f\x73\x6f\x63\x6b\x65\x74\x00\x00\x00\x00\x00\x00	
+A	14550	python3	-c	import os; open("/tmp/x","w").write("a"); os.rename("/tmp/x","/tmp/y"); os.chmod("/tmp/y",0o600); os.unlink("/tmp/y")
+B	execve	14550	14550	14535	0	python3	0	0	0	/usr/local/bin/python3	
+B	openat	14550	14550	14535	0	python3	3	577	0	/tmp/x	
+B	rename	14550	14550	14535	0	python3	0	0	0	/tmp/x	/tmp/y
+B	chmod	14550	14550	14535	0	python3	0	384	0	/tmp/y	
+B	unlinkat	14550	14550	14535	0	python3	0	0	0	/tmp/y	
+B	connect	14600	14600	1	1000	curl	-115	0	0	\x02\x00\x01\xbb\x7f\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00	
+Lost 3 events

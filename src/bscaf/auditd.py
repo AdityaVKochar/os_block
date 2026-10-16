@@ -176,7 +176,13 @@ def _sockaddr(fields: dict[str, tuple[str, bool]], body: str, interpreted: bool)
     raw = fields.get("saddr", ("", False))[0]
     if not HEX.match(raw) or len(raw) < 4:
         return None
-    data = bytes.fromhex(raw)
+    return decode_sockaddr(bytes.fromhex(raw))
+
+
+def decode_sockaddr(data: bytes) -> str | None:
+    """Render a kernel `struct sockaddr` (IPv4, IPv6 or unix) as a destination string."""
+    if len(data) < 2:
+        return None
     family = int.from_bytes(data[0:2], "little")
     if family == 2 and len(data) >= 8:
         return f"{ipaddress.IPv4Address(data[4:8])}:{int.from_bytes(data[2:4], 'big')}"

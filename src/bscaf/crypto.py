@@ -10,13 +10,22 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
+# When set, new private keys are encrypted with this passphrase and existing ones need it to load.
+PASSPHRASE_ENV = "BSCAF_KEY_PASSPHRASE"
+
+
+def _passphrase() -> bytes | None:
+    value = os.environ.get(PASSPHRASE_ENV)
+    return value.encode("utf-8") if value else None
+
 
 def create_keypair(private_path: Path, public_path: Path) -> None:
     private_key = Ed25519PrivateKey.generate()
+    passphrase = _passphrase()
     private_bytes = private_key.private_bytes(
         serialization.Encoding.PEM,
         serialization.PrivateFormat.PKCS8,
-        serialization.NoEncryption(),
+        serialization.BestAvailableEncryption(passphrase) if passphrase else serialization.NoEncryption(),
     )
     # Create the private key owner-readable only, before any bytes are written.
     descriptor = os.open(private_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -31,7 +40,11 @@ def create_keypair(private_path: Path, public_path: Path) -> None:
 
 
 def load_private_key(private_path: Path) -> Ed25519PrivateKey:
-    key = serialization.load_pem_private_key(private_path.read_bytes(), password=None)
+    data = private_path.read_bytes()
+    passphrase = _passphrase() if b"ENCRYPTED" in data else None
+    if b"ENCRYPTED" in data and passphrase is None:
+        raise ValueError(f"{private_path} is encrypted; set {PASSPHRASE_ENV}")
+    key = serialization.load_pem_private_key(data, password=passphrase)
     if not isinstance(key, Ed25519PrivateKey):
         raise TypeError("expected an Ed25519 private key")
     return key

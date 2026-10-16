@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from bisect import bisect_right
-from collections import Counter
+from collections import Counter, deque
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
@@ -248,6 +248,41 @@ class AuditService:
     def events(self) -> list[AuditEvent]:
         """Return normalized events for local audit and demonstration views."""
         return list(self.store.events())
+
+    def search(
+        self,
+        syscall: str | None = None,
+        pid: int | None = None,
+        uid: int | None = None,
+        host_id: str | None = None,
+        text: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        limit: int = 100,
+        newest: bool = False,
+    ) -> list[AuditEvent]:
+        """Stream the event store and return matches (the first `limit`, or the last with newest=True)."""
+        start = parse_timestamp(since) if since else None
+        end = parse_timestamp(until) if until else None
+        needle = text.lower() if text else None
+        matches: deque[AuditEvent] | list[AuditEvent] = deque(maxlen=limit) if newest else []
+        for event in self.store.events():
+            if syscall and event.syscall != syscall:
+                continue
+            if pid is not None and pid not in (event.pid, event.ppid):
+                continue
+            if (uid is not None and event.uid != uid) or (host_id and event.host_id != host_id):
+                continue
+            if start or end:
+                moment = parse_timestamp(event.timestamp)
+                if (start and moment < start) or (end and moment > end):
+                    continue
+            if needle and needle not in (event.process + " " + canonical_json(event.arguments).decode("utf-8")).lower():
+                continue
+            matches.append(event)
+            if not newest and len(matches) >= limit:
+                break
+        return list(matches)
 
     # ----------------------------------------------------------------- verify
 

@@ -13,6 +13,7 @@ from .policy import AuditPolicy
 from .service import AuditService
 from .witness import WitnessStore, replicate, serve_witness, verify_with_witnesses
 from .proof import verify_exported_proof
+from .tlsutil import client_context, create_dev_pki, server_context
 from .ui import serve_ui
 
 
@@ -32,6 +33,29 @@ def _service(args: argparse.Namespace) -> AuditService:
         batch_seconds=args.batch_seconds,
         durable=not args.no_fsync,
     )
+
+
+def _tls(args: argparse.Namespace):
+    return client_context(args.ca_file, args.client_cert, args.client_key)
+
+
+def _replicator(service: AuditService, args: argparse.Namespace):
+    """Push new blocks to witnesses as soon as they are committed (streaming ingest modes)."""
+    if not getattr(args, "replicate_url", None):
+        return None
+    state = {"blocks": 0, "last": None}
+
+    def push() -> None:
+        checkpoints = service.checkpoints()
+        if len(checkpoints) == state["blocks"]:
+            return
+        summary, acks = replicate(args.replicate_url, checkpoints, service.store.acks(), args.quorum, context=_tls(args))
+        for ack in acks:
+            service.store.append_ack(ack)
+        state.update(blocks=len(checkpoints), last={key: summary[key] for key in ("blocks", "witnesses_complete", "quorum_met")})
+
+    push.state = state
+    return push
 
 
 def _print(payload: Any) -> None:
@@ -75,6 +99,7 @@ def _ingest_auditd(service: AuditService, args: argparse.Namespace) -> dict[str,
     parser = AuditdParser(host_id=args.host_id, assume_tz=parse_timezone(args.assume_tz), strict=args.strict)
     cursor = _IngestCursor(service.store.ingest_state_path, enabled=not args.no_dedupe)
     totals = {"accepted": 0, "ignored_by_policy": 0, "invalid_events": {}, "checkpoints_created": 0}
+    push = _replicator(service, args)
 
     def ingest(events: list[dict]) -> None:
         stats = service.ingest_many(cursor.fresh(iter(events)), strict=args.strict).to_dict()
@@ -83,6 +108,8 @@ def _ingest_auditd(service: AuditService, args: argparse.Namespace) -> dict[str,
         for reason, count in stats["rejected"].items():
             totals["invalid_events"][reason] = totals["invalid_events"].get(reason, 0) + count
         cursor.save()
+        if push:
+            push()
 
     if args.follow:
         pending: list[dict] = []
@@ -97,14 +124,18 @@ def _ingest_auditd(service: AuditService, args: argparse.Namespace) -> dict[str,
                 if pending:
                     ingest(pending)
                     pending = []
-                service.commit_due()
+                if service.commit_due() and push:
+                    push()
         except KeyboardInterrupt:
             ingest(pending + parser.finish())
     else:
         with open_lines(args.input) as handle:
             # Exports are often newest-first; commit a finished file in audit order.
             ingest(sorted(parser.parse_lines(handle), key=event_order))
-    return {**totals, "duplicates_skipped": cursor.duplicates, "policy_version": service.policy.version, **parser.stats()}
+    result = {**totals, "duplicates_skipped": cursor.duplicates, "policy_version": service.policy.version, **parser.stats()}
+    if push:
+        result["replication"] = push.state["last"]
+    return result
 
 
 def main() -> None:
@@ -116,6 +147,9 @@ def main() -> None:
     parser.add_argument("--policy", help="JSON policy file (allowed_syscalls, redact_argument_keys, max_argument_length)")
     parser.add_argument("--all-syscalls", action="store_true", help="keep every system call (redaction still applies)")
     parser.add_argument("--no-fsync", action="store_true", help="skip fsync on commit (benchmarking only)")
+    parser.add_argument("--ca-file", help="CA certificate trusted for https:// witness URLs")
+    parser.add_argument("--client-cert", help="client certificate for mutual TLS with witnesses")
+    parser.add_argument("--client-key", help="private key of --client-cert")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("init")
     ingest = sub.add_parser("ingest", help="ingest newline-delimited JSON events")
@@ -127,6 +161,28 @@ def main() -> None:
     auditd.add_argument("--strict", action="store_true", help="stop at the first malformed record")
     auditd.add_argument("--follow", action="store_true", help="keep tailing the log (handles rotation); Ctrl+C to stop")
     auditd.add_argument("--no-dedupe", action="store_true", help="also ingest records older than the last ingested one for the host")
+    auditd.add_argument("--replicate-url", action="append", help="push each new block to this witness (repeatable)")
+    auditd.add_argument("--quorum", type=int, default=1)
+    ebpf = sub.add_parser("ingest-ebpf", help="trace live system calls with bpftrace (root, tracefs)")
+    ebpf.add_argument("--duration", type=float, default=0, help="seconds to trace (0 = until Ctrl+C)")
+    ebpf.add_argument("--host-id", default="localhost")
+    ebpf.add_argument("--syscalls", help="comma-separated subset of the traceable system calls")
+    ebpf.add_argument("--bpftrace", default="bpftrace", help="bpftrace executable")
+    ebpf.add_argument("--replicate-url", action="append", help="push each new block to this witness (repeatable)")
+    ebpf.add_argument("--quorum", type=int, default=1)
+    search = sub.add_parser("search", help="find events by system call, process, user, host, text or time")
+    search.add_argument("--syscall")
+    search.add_argument("--pid", type=int, help="matches the process or its parent")
+    search.add_argument("--uid", type=int)
+    search.add_argument("--host-id")
+    search.add_argument("--text", help="case-insensitive match on process and arguments (paths, argv, destination)")
+    search.add_argument("--since", help="ISO-8601 timestamp, e.g. 2026-10-16T10:00:00Z")
+    search.add_argument("--until")
+    search.add_argument("--limit", type=int, default=50)
+    search.add_argument("--newest", action="store_true", help="return the most recent matches")
+    tls_certs = sub.add_parser("tls-certs", help="write a development CA plus witness server and client certificates")
+    tls_certs.add_argument("--out", required=True)
+    tls_certs.add_argument("--host", action="append", default=[], help="name or IP the witness is reached at (repeatable)")
     sub.add_parser("flush")
     verify = sub.add_parser("verify", help="verify the local ledger, optionally against witnesses")
     verify.add_argument("--witness", action="append", default=[], help="witness base URL (repeatable)")
@@ -155,6 +211,9 @@ def main() -> None:
     witness_serve.add_argument("--witness-dir", required=True)
     witness_serve.add_argument("--host", default="127.0.0.1")
     witness_serve.add_argument("--port", type=int, default=8080)
+    witness_serve.add_argument("--tls-cert", help="serve HTTPS with this certificate")
+    witness_serve.add_argument("--tls-key", help="private key of --tls-cert")
+    witness_serve.add_argument("--client-ca", help="require client certificates issued by this CA (mutual TLS)")
     ui = sub.add_parser("ui", help="run the minimal local audit dashboard")
     ui.add_argument("--host", default="127.0.0.1")
     ui.add_argument("--port", type=int, default=8000)
@@ -201,7 +260,7 @@ def main() -> None:
                 parser.error("--witness-key must look like WITNESS_ID=path.pem")
             report = verify_with_witnesses(
                 report, service.checkpoints(), service.store.acks(), service.store.public_key_path,
-                args.witness, keys, args.quorum, args.signer_id, args.timeout,
+                args.witness, keys, args.quorum, args.signer_id, args.timeout, _tls(args),
             )
         _print(report)
         sys.exit(0 if report["valid"] else 1)
@@ -217,7 +276,7 @@ def main() -> None:
     elif args.command == "policy":
         _print({"version": service.policy.version, **service.policy.to_dict()})
     elif args.command == "replicate":
-        summary, acks = replicate(args.url, service.checkpoints(), service.store.acks(), args.quorum, args.timeout)
+        summary, acks = replicate(args.url, service.checkpoints(), service.store.acks(), args.quorum, args.timeout, _tls(args))
         for ack in acks:
             service.store.append_ack(ack)
         _print({**summary, "new_acks": len(acks)})
@@ -231,7 +290,31 @@ def main() -> None:
         destination = store.trust_signer(args.trusted_signer_id, Path(args.public_key))
         print(json.dumps({"trusted_key": str(destination)}))
     elif args.command == "witness-serve":
-        serve_witness(Path(args.witness_dir), args.host, args.port)
+        if bool(args.tls_cert) != bool(args.tls_key):
+            parser.error("--tls-cert and --tls-key must be given together")
+        tls = server_context(args.tls_cert, args.tls_key, args.client_ca) if args.tls_cert else None
+        serve_witness(Path(args.witness_dir), args.host, args.port, tls)
+    elif args.command == "ingest-ebpf":
+        from .ebpf import DEFAULT_EBPF_SYSCALLS, capture
+
+        syscalls = args.syscalls.split(",") if args.syscalls else DEFAULT_EBPF_SYSCALLS
+        push = _replicator(service, args)
+        try:
+            result = capture(service, args.duration, args.host_id, syscalls, args.bpftrace, on_commit=push)
+        except (OSError, RuntimeError, ValueError) as error:
+            parser.error(str(error))
+        if push:
+            result["replication"] = push.state["last"]
+        _print(result)
+    elif args.command == "search":
+        try:
+            events = service.search(args.syscall, args.pid, args.uid, args.host_id, args.text, args.since, args.until, args.limit, args.newest)
+        except ValueError as error:
+            parser.error(str(error))
+        for event in events:
+            print(json.dumps(event.to_dict(), sort_keys=True))
+    elif args.command == "tls-certs":
+        _print(create_dev_pki(Path(args.out), args.host or ["127.0.0.1", "localhost"]))
     elif args.command == "ui":
         serve_ui(service, args.host, args.port, open_browser=not args.no_browser)
     elif args.command == "bench":

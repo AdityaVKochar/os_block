@@ -23,6 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 from shutil import copyfile
+import ssl
 import threading
 from typing import Any, Iterable
 from urllib.error import HTTPError, URLError
@@ -166,11 +167,11 @@ class WitnessStore:
 # ---------------------------------------------------------------- client side
 
 
-def _request(url: str, payload: dict | None = None, timeout: float = 5.0) -> dict[str, Any]:
+def _request(url: str, payload: dict | None = None, timeout: float = 5.0, context: ssl.SSLContext | None = None) -> dict[str, Any]:
     data = None if payload is None else canonical_json(payload)
     request = Request(url, data=data, headers={"Content-Type": "application/json"}, method="GET" if data is None else "POST")
     try:
-        with urlopen(request, timeout=timeout) as response:
+        with urlopen(request, timeout=timeout, context=context) as response:
             return json.loads(response.read().decode("utf-8"))
     except HTTPError as error:
         try:
@@ -180,22 +181,29 @@ def _request(url: str, payload: dict | None = None, timeout: float = 5.0) -> dic
         raise ValueError(message or f"HTTP {error.code}") from error
 
 
-def replicate_checkpoint(url: str, checkpoint: Checkpoint, timeout: float = 5.0) -> dict[str, Any]:
-    return _request(url.rstrip("/") + "/checkpoints", checkpoint.to_dict(), timeout)
+def replicate_checkpoint(url: str, checkpoint: Checkpoint, timeout: float = 5.0, context: ssl.SSLContext | None = None) -> dict[str, Any]:
+    return _request(url.rstrip("/") + "/checkpoints", checkpoint.to_dict(), timeout, context)
 
 
-def replicate(urls: Iterable[str], checkpoints: list[Checkpoint], known_acks: Iterable[dict], quorum: int, timeout: float = 5.0) -> tuple[dict[str, Any], list[dict]]:
+def replicate(
+    urls: Iterable[str],
+    checkpoints: list[Checkpoint],
+    known_acks: Iterable[dict],
+    quorum: int,
+    timeout: float = 5.0,
+    context: ssl.SSLContext | None = None,
+) -> tuple[dict[str, Any], list[dict]]:
     """Push blocks to every witness; return a quorum summary and the new acknowledgements."""
     acked = {(ack["witness_id"], ack["block_hash"]) for ack in known_acks}
     witnesses, new_acks = [], []
     for url in urls:
         summary: dict[str, Any] = {"url": url, "available": False, "witness_id": None, "acked_blocks": 0, "error": None}
         try:
-            health = _request(url.rstrip("/") + "/health", timeout=timeout)
+            health = _request(url.rstrip("/") + "/health", timeout=timeout, context=context)
             summary.update(available=True, witness_id=health["witness_id"])
             for checkpoint in checkpoints:
                 if (health["witness_id"], checkpoint.block_hash) not in acked:
-                    ack = replicate_checkpoint(url, checkpoint, timeout)
+                    ack = replicate_checkpoint(url, checkpoint, timeout, context)
                     new_acks.append({key: ack[key] for key in (*ACK_FIELDS, "signature")})
                 summary["acked_blocks"] += 1
         except (OSError, URLError, ValueError, KeyError) as error:
@@ -215,6 +223,7 @@ def verify_with_witnesses(
     quorum: int,
     signer_id: str,
     timeout: float = 5.0,
+    context: ssl.SSLContext | None = None,
 ) -> dict[str, Any]:
     """Extend a local verification report with witness ledger comparison and ack checks."""
     problems = list(report["problems"])
@@ -224,8 +233,8 @@ def verify_with_witnesses(
     for url in urls:
         entry: dict[str, Any] = {"url": url, "available": False, "witness_id": None, "blocks": 0, "consistent": None, "error": None}
         try:
-            health = _request(url.rstrip("/") + "/health", timeout=timeout)
-            remote = _request(url.rstrip("/") + f"/checkpoints?signer={quote(signer_id)}", timeout=timeout)["checkpoints"]
+            health = _request(url.rstrip("/") + "/health", timeout=timeout, context=context)
+            remote = _request(url.rstrip("/") + f"/checkpoints?signer={quote(signer_id)}", timeout=timeout, context=context)["checkpoints"]
             entry.update(available=True, witness_id=health["witness_id"], blocks=len(remote))
         except (OSError, URLError, ValueError, KeyError) as error:
             entry["error"] = str(getattr(error, "reason", error))
@@ -292,7 +301,22 @@ def verify_with_witnesses(
 # ---------------------------------------------------------------- HTTP server
 
 
-def make_witness_server(root: Path, host: str, port: int) -> ThreadingHTTPServer:
+class _TLSThreadingHTTPServer(ThreadingHTTPServer):
+    """HTTPS server whose TLS handshake runs in the request thread, so a slow client cannot stall accept()."""
+
+    def __init__(self, address, handler, context: ssl.SSLContext):
+        self.tls_context = context
+        super().__init__(address, handler)
+
+    def finish_request(self, request, client_address) -> None:
+        try:
+            request = self.tls_context.wrap_socket(request, server_side=True)
+        except (ssl.SSLError, OSError):
+            return
+        super().finish_request(request, client_address)
+
+
+def make_witness_server(root: Path, host: str, port: int, tls: ssl.SSLContext | None = None) -> ThreadingHTTPServer:
     store = WitnessStore(root)
     store.initialize()
 
@@ -333,22 +357,24 @@ def make_witness_server(root: Path, host: str, port: int) -> ThreadingHTTPServer
         def log_message(self, format: str, *args: Any) -> None:
             return
 
-    return ThreadingHTTPServer((host, port), Handler)
+    return _TLSThreadingHTTPServer((host, port), Handler, tls) if tls else ThreadingHTTPServer((host, port), Handler)
 
 
-def serve_witness(root: Path, host: str, port: int) -> None:
-    make_witness_server(root, host, port).serve_forever()
+def serve_witness(root: Path, host: str, port: int, tls: ssl.SSLContext | None = None) -> None:
+    make_witness_server(root, host, port, tls).serve_forever()
 
 
-def start_local_witnesses(base_dir: Path, count: int, signer_id: str, source_public_key: Path) -> tuple[list[str], dict[str, Path], list[ThreadingHTTPServer]]:
+def start_local_witnesses(
+    base_dir: Path, count: int, signer_id: str, source_public_key: Path, tls: ssl.SSLContext | None = None
+) -> tuple[list[str], dict[str, Path], list[ThreadingHTTPServer]]:
     """Run `count` witnesses on ephemeral localhost ports (tests, demos and experiments)."""
     urls, keys, servers = [], {}, []
     for index in range(1, count + 1):
         store = WitnessStore(base_dir / f"witness-{index}", witness_id=f"witness-{index}")
         store.trust_signer(signer_id, source_public_key)
-        server = make_witness_server(store.root, "127.0.0.1", 0)
+        server = make_witness_server(store.root, "127.0.0.1", 0, tls)
         threading.Thread(target=server.serve_forever, daemon=True).start()
-        urls.append(f"http://127.0.0.1:{server.server_address[1]}")
+        urls.append(f"{'https' if tls else 'http'}://127.0.0.1:{server.server_address[1]}")
         keys[store.witness_id] = store.public_key_path
         servers.append(server)
     return urls, keys, servers
