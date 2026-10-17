@@ -23,6 +23,8 @@ from docx.shared import Inches, Pt
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import build_formal_draft as base  # noqa: E402  (shared styles, diagram helpers and references)
+import report_charts  # noqa: E402
+import report_diagrams  # noqa: E402
 
 DOCUMENTS_DIR = base.DOCUMENTS_DIR
 DATA_DIR = DOCUMENTS_DIR / "data"
@@ -134,6 +136,19 @@ def table(doc, headers, rows, widths=None):
     return grid
 
 
+FIGURES = {"n": 1}
+
+
+def figure(doc, path, text, width=6.3):
+    """Insert a picture with an automatically numbered caption."""
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.paragraph_format.keep_with_next = True
+    p.add_run().add_picture(str(path), width=Inches(width))
+    FIGURES["n"] += 1
+    caption(doc, f"Figure {FIGURES['n']}. {text}")
+
+
 def caption(doc, text):
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -167,6 +182,9 @@ def build() -> None:
     real = json.loads((DATA_DIR / "real-data-summary.json").read_text(encoding="utf-8"))
     live = json.loads((DATA_DIR / "live-summary.json").read_text(encoding="utf-8"))
     create_final_diagram()
+    charts = report_charts.build_all(real, live, base.ASSET_DIR / "charts")
+    diagrams = report_diagrams.build_all(base.ASSET_DIR / "diagrams")
+    FIGURES["n"] = 1
     doc = Document()
     base.configure_document(doc)
 
@@ -249,8 +267,10 @@ def build() -> None:
     base.add_heading(doc, "5.1 Collection", 2)
     base.add_body(doc, "The eBPF collector generates a bpftrace program that attaches to the entry and exit tracepoints of the policy's system calls. Arguments saved at entry are emitted with the return code at exit, keyed by kernel thread ID so the program also works inside a container's PID namespace; execve records carry the command line and connect/bind records carry decoded socket addresses. The collector learns its own kernel PID with a one-shot probe so it never records its own I/O.")
     base.add_body(doc, "The auditd adapter reads raw, ENRICHED, node-prefixed and ausearch -i exports. It merges the SYSCALL, EXECVE, PATH, CWD, SOCKADDR and PROCTITLE records of one kernel event, decodes hex-encoded values, maps syscall numbers per architecture (x86_64, aarch64, i386), streams compressed or standard input, follows rotating logs and skips records already ingested.")
+    figure(doc, diagrams["deployment"], "Live-capture deployment used in the evaluation: the eBPF collector runs in a privileged container and traces the shared WSL2 kernel.")
     base.add_heading(doc, "5.2 Evidence Construction", 2)
     base.add_body(doc, "Each accepted event is normalized to a fixed schema (sequence, UTC time, host, PID, PPID, UID, system call, process, arguments, return code) and serialized canonically. Its hash covers the previous event's hash. Blocks close after N events, after T seconds of event time, or when the host changes.")
+    figure(doc, diagrams["evidence"], "Evidence structure: each event hash covers its predecessor, a Merkle root commits each batch, and signed blocks link to their predecessor and are copied to every witness.")
     base.add_heading(doc, "5.3 Checkpoint Blocks", 2)
     table(doc, ["Field", "Purpose"], [
         ("block_number, previous_block_hash", "Order and linkage of the permissioned chain"),
@@ -263,9 +283,11 @@ def build() -> None:
     ], widths=[2.6, 3.6])
     base.add_heading(doc, "5.4 Witness Quorum", 2)
     base.add_body(doc, "Witnesses trust a configured set of source keys. A witness accepts a block only if its hash and signature are valid and it extends the chain that witness already holds; a different block for an existing number is refused with HTTP 409 and stored as equivocation evidence. Each acceptance returns an acknowledgement signed with the witness's own key. Transport is HTTPS with optional mutual TLS, and streaming collectors push each block as soon as it is signed.")
+    figure(doc, diagrams["sequence"], "Witness protocol: replication with signed acknowledgements, refusal of a rewritten block, and independent comparison by an auditor.")
     base.add_heading(doc, "5.5 Verification", 2)
     base.add_body(doc, "Local verification recomputes every event hash and link, every Merkle root, block hash, link and signature, and checks block numbering, ranges and replayed batches in a single indexed pass. Verification against witnesses compares the local ledger with each witness copy, which exposes tail truncation and re-signed history, and checks acknowledgement signatures. Verdicts are pass, fail (with the first invalid item) or partial (uncommitted events or witness quorum unreachable). A portable proof contains one event, its Merkle path and its signed block, and verifies with only the source public key.")
 
+    figure(doc, diagrams["verification"], "Verification decision flow leading to a pass, partial or fail verdict.", width=5.8)
     base.add_heading(doc, "6. Implementation", 1)
     base.add_body(doc, "B-SCAF is a Python 3.11+ package whose only runtime dependency is the cryptography library. Every experiment runs in containers, so nothing is installed on the host: a slim runtime image for tests and replay experiments, and a privileged image with bpftrace for live capture.")
     table(doc, ["Module", "Responsibility"], [
@@ -294,6 +316,8 @@ def build() -> None:
         ("Records rejected", "11 whole files", fmt(sum(everything.get("rejected", {}).values()))),
     ], widths=[2.8, 1.6, 1.8])
     caption(doc, "Table 1. Ingestion of the public auditd dataset.")
+    figure(doc, charts["ingest"], "Ingestion of the 100 public auditd logs: earlier prototype compared with the final system.")
+    figure(doc, charts["dataset_syscalls"], "System calls committed from the public dataset, by policy.", width=5.8)
     labels = {"default policy": "Default policy", "all policy": "All system calls"}
     verify_rows = [(labels.get(name, name), report["verdict"], fmt(report["events_checked"]), fmt(report["checkpoints_checked"])) for name, report in real["verify"].items()]
     table(doc, ["Ledger", "Verdict", "Events", "Blocks"], verify_rows, widths=[2.2, 1.2, 1.2, 1.2])
@@ -306,12 +330,14 @@ def build() -> None:
         (phase, fmt(row["workload_seconds"], 2), f"{row['slowdown_percent']:+.1f}%", fmt(row["collector_cpu_seconds"], 2)) for phase, row in overview.items()
     ], widths=[2.0, 1.5, 1.2, 1.5])
     caption(doc, "Table 2. Workload slowdown: no tracing, eBPF tracing alone, full B-SCAF capture with witness replication.")
+    figure(doc, charts["live_overhead"], "Live workload time per phase (bars: median of three runs; dots: individual runs).")
     table(doc, ["Run", "Events", "Blocks", "Lost", "Commit delay p50/p95 (ms)", "Verdict (local / witnesses)", "Workload calls captured"], [
         (index, fmt(run["events"]), run["blocks"], run["collector"]["lost_events"], f"{run['commit_delay_ms_median']:.0f} / {run['commit_delay_ms_p95']:.0f}",
          f"{run['verify_local']} / {run['verify_witnesses']}", f"{run['completeness']['captured']:,} / {run['completeness']['expected']:,}")
         for index, run in enumerate(live_runs, start=1)
     ])
     caption(doc, "Table 3. Live B-SCAF runs with 1-second blocks replicated to three witnesses.")
+    figure(doc, charts["live_syscalls"], "System calls captured host-wide during one live run (the workload plus all other host activity).", width=5.8)
     lost_note = "no events were reported lost" if all(run["collector"]["lost_events"] == 0 for run in live_runs) else "the perf buffer reported a small number of lost host events in some runs, none of them belonging to the workload"
     base.add_body(doc, f"Every workload operation reached the signed ledger in every run, and {lost_note}. The slowdown with full B-SCAF capture is no larger than with tracing alone (the difference is within run-to-run variation on this short workload), so the cost comes from attaching tracepoints to hot system calls such as openat. The user-space work of hashing, signing and replicating runs on another core and used about {overview['B-SCAF']['collector_cpu_seconds']:.1f} CPU-seconds per run. Commit delay is bounded by the 1-second block interval.")
 
@@ -320,6 +346,7 @@ def build() -> None:
         (row["description"], row["local_verdict"], row["witness_verdict"], row["detected_by"]) for row in real["attacks"]
     ], widths=[3.2, 0.9, 1.2, 0.9])
     caption(doc, "Table 4. Attack matrix on the real-data ledger (identical outcomes on the live ledger).")
+    figure(doc, charts["attacks"], "Attack scenarios: verdict with local verification only and with three witnesses.")
     base.add_body(doc, "Edits, deletions, insertions, reordering, Merkle-root changes and replayed blocks are caught by local verification. Deleting the newest block and re-signing a rewritten history with the stolen key leave a locally consistent ledger, and only comparison with the witnesses exposes them; the witnesses also refused the rewritten blocks when they were offered. A forged acknowledgement fails its witness signature, and losing the witness quorum yields partial evidence rather than a false pass.")
 
     if bench:
@@ -332,6 +359,10 @@ def build() -> None:
             for label, row in bench.items()
         ])
         caption(doc, "Table 5. Throughput, latency, storage and verification on replayed events.")
+        figure(doc, charts["throughput"], "Ingest throughput per configuration on one core.")
+        figure(doc, charts["latency"], "Per-event processing latency: median and 95th percentile.")
+        figure(doc, charts["tradeoff"], "Effect of block size on throughput and on the delay until an event is signed.")
+        figure(doc, charts["storage"], "Storage cost per event.")
         n100 = bench.get("B-SCAF N=100")
         if n100:
             base.add_body(doc, f"With 100-event blocks B-SCAF sustained {n100['events_per_second']:,.0f} events/s on one core, verified {events:,} events in {n100['verify_seconds']:.1f} s, verified a single proof in {1000 * n100['proof_verify_seconds']:.1f} ms and replicated its blocks to three witnesses in {n100.get('replicate_seconds', 0):.1f} s. Durable commits (fsync per block) reduce throughput, which matters on filesystems with slow flushes such as the WSL2 virtual disk.")

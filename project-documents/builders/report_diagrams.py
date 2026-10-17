@@ -1,0 +1,259 @@
+"""Project diagrams for the final report, in the same black-and-white style as Figure 1.
+
+Each function draws one PNG with the shared box/arrow helpers of build_formal_draft.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from PIL import Image, ImageDraw
+
+import build_formal_draft as base
+
+WHITE, LIGHT, MID = "#FFFFFF", "#F4F4F4", "#E4E4E4"
+
+
+def _canvas(width: int, height: int, title: str):
+    canvas = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(canvas)
+    font = base.find_font(46, bold=True)
+    draw.text(((width - draw.textlength(title, font=font)) / 2, 26), title, fill="black", font=font)
+    return canvas, draw
+
+
+def _label(draw, xy, text, size=24, bold=False, anchor="la"):
+    draw.text(xy, text, fill="black", font=base.find_font(size, bold=bold), anchor=anchor)
+
+
+def _group(draw, coords, label, fill=LIGHT):
+    draw.rounded_rectangle(coords, radius=22, fill=fill, outline="black", width=3)
+    font = base.find_font(28, bold=True)
+    draw.text((coords[0] + 22, coords[1] + 14), label, fill="black", font=font)
+
+
+def _diamond(draw, center, half_w, half_h, text, font):
+    x, y = center
+    draw.polygon([(x, y - half_h), (x + half_w, y), (x, y + half_h), (x - half_w, y)], fill=WHITE, outline="black", width=4)
+    base.center_text(draw, (x - half_w + 40, y - half_h + 20, x + half_w - 40, y + half_h - 20), text, font, spacing=4)
+
+
+def _dashed(draw, start, end, dash=14, gap=10, width=3):
+    (x1, y1), (x2, y2) = start, end
+    length = max(abs(x2 - x1), abs(y2 - y1))
+    steps = int(length // (dash + gap)) + 1
+    for index in range(steps):
+        a = index * (dash + gap) / length
+        b = min(1.0, (index * (dash + gap) + dash) / length)
+        draw.line([(x1 + (x2 - x1) * a, y1 + (y2 - y1) * a), (x1 + (x2 - x1) * b, y1 + (y2 - y1) * b)], fill="black", width=width)
+
+
+# ------------------------------------------------------------- evidence structure
+
+def evidence_structure(out: Path) -> Path:
+    canvas, draw = _canvas(2400, 1560, "Evidence Structure: Hash Chain, Merkle Batch and Signed Blocks")
+    box_font = base.find_font(25, bold=True)
+    small = base.find_font(23)
+
+    _group(draw, (40, 110, 2360, 470), "Event hash chain (events.jsonl)")
+    xs = [110, 650, 1190, 1730]
+    for index, x in enumerate(xs, start=1):
+        draw.rounded_rectangle((x, 190, x + 470, 420), radius=16, fill=WHITE, outline="black", width=4)
+        _label(draw, (x + 235, 215), f"Event {index}", 27, True, "ma")
+        _label(draw, (x + 235, 262), "syscall, pid, ppid, uid, time,", 22, False, "ma")
+        _label(draw, (x + 235, 294), "process, arguments, return", 22, False, "ma")
+        _label(draw, (x + 235, 350), f"h{index} = SHA-256(event{index} || h{index - 1})", 22, True, "ma")
+        if index < 4:
+            base.arrow(draw, (x + 470, 305), (xs[index], 305))
+    _label(draw, (110, 432), "h0 = genesis (64 zeros). Changing, deleting, inserting or reordering any event breaks every later link.", 22)
+
+    _group(draw, (40, 510, 1180, 1000), "Merkle batch (one block = N events)")
+    leaves = [(110, 860), (370, 860), (630, 860), (890, 860)]
+    for index, (x, y) in enumerate(leaves, start=1):
+        base.box(draw, (x, y, x + 200, y + 90), f"h{index}", box_font)
+    base.box(draw, (240, 720, 440, 810), "H(h1||h2)", small)
+    base.box(draw, (760, 720, 960, 810), "H(h3||h4)", small)
+    base.box(draw, (470, 580, 730, 670), "Merkle root", box_font)
+    for x in (210, 470):
+        base.arrow(draw, (x, 860), (340, 810))
+    for x in (730, 990):
+        base.arrow(draw, (x, 860), (860, 810))
+    base.arrow(draw, (340, 720), (560, 670))
+    base.arrow(draw, (860, 720), (640, 670))
+    _label(draw, (90, 960), "Proof for event 3: h4 + H(h1||h2), checked against the signed root.", 22)
+
+    _group(draw, (1220, 510, 2360, 1000), "Signed checkpoint chain (checkpoints.jsonl)")
+    blocks = [(1260, "Block k-1"), (1640, "Block k"), (2020, "Block k+1")]
+    for x, name in blocks:
+        draw.rounded_rectangle((x, 600, x + 320, 940), radius=16, fill=WHITE, outline="black", width=4)
+        _label(draw, (x + 160, 618), name, 27, True, "ma")
+        for row, text in enumerate(["previous_block_hash", "merkle_root", "first..last sequence", "time window", "policy_version", "Ed25519 signature"]):
+            _label(draw, (x + 24, 672 + row * 42), text, 21)
+    for (x, _), (nx, _) in zip(blocks, blocks[1:]):
+        base.routed_arrow(draw, [(nx, 690), (x + 320, 690)])
+    base.routed_arrow(draw, [(730, 625), (1110, 625), (1110, 1035), (1600, 1035), (1600, 735), (1640, 735)])
+    _label(draw, (1130, 1045), "root written into block k", 22)
+
+    _group(draw, (40, 1120, 2360, 1460), "Independent copies", fill=MID)
+    for index, x in enumerate((140, 900, 1660)):
+        base.box(draw, (x, 1200, x + 600, 1300), f"Witness {index + 1}: same signed blocks, chain continuity enforced", small)
+        base.arrow(draw, (x + 300, 1300), (x + 300, 1370))
+        base.box(draw, (x + 80, 1370, x + 520, 1440), f"Signed ack from witness {index + 1}", small)
+    # Every signed block is pushed to each witness along one bus.
+    draw.line([(1800, 940), (1800, 1095)], fill="black", width=5)
+    draw.line([(440, 1095), (1960, 1095)], fill="black", width=5)
+    for x in (440, 1200, 1960):
+        base.arrow(draw, (x, 1095), (x, 1200))
+    _label(draw, (1820, 960), "each signed block", 22)
+    canvas.save(out, dpi=(220, 220))
+    return out
+
+
+# ------------------------------------------------------------- witness protocol
+
+def witness_sequence(out: Path) -> Path:
+    canvas, draw = _canvas(2400, 1820, "Witness Protocol (sequence)")
+    head_font = base.find_font(27, bold=True)
+    lanes = {"source": 330, "witness": 1200, "auditor": 2060}
+    heads = {"source": "Source host\n(collector + ledger)", "witness": "Witness i of N\n(HTTPS, mutual TLS)", "auditor": "Auditor / verifier"}
+    for key, x in lanes.items():
+        base.box(draw, (x - 260, 110, x + 260, 230), heads[key].replace("\n", " "), head_font)
+        _dashed(draw, (x, 230), (x, 1760))
+
+    def message(y, start, end, text, number, reply=False):
+        x1, x2 = lanes[start], lanes[end]
+        if reply:
+            sign = 1 if x2 > x1 else -1
+            _dashed(draw, (x1, y), (x2 - 20 * sign, y), dash=18, gap=10, width=4)
+            base.arrow(draw, (x2 - 40 * sign, y), (x2, y))
+        else:
+            base.arrow(draw, (x1, y), (x2, y))
+        _label(draw, ((x1 + x2) / 2, y - 40), f"{number}. {text}", 24, False, "ma")
+
+    def self_note(y, lane, text, number, height=70, left=False):
+        x = lanes[lane]
+        x1, x2 = (x - 470, x - 20) if left else (x + 20, x + 470)
+        draw.rectangle((x1, y - height / 2, x2, y + height / 2), fill=LIGHT, outline="black", width=3)
+        base.center_text(draw, (x1, y - height / 2, x2, y + height / 2), f"{number}. {text}", base.find_font(22), spacing=3)
+
+    self_note(310, "source", "Close batch, sign block k (Ed25519)", 1)
+    message(430, "source", "witness", "POST /checkpoints  (block k, metadata only)", 2)
+    self_note(540, "witness", "Trusted signer? Hash and signature valid? Extends held chain?", 3, height=100)
+    message(680, "witness", "source", "201 Created + ack signed by the witness key", 4, reply=True)
+    self_note(780, "source", "Store ack in witness-acks.jsonl; quorum K of N reached", 5, height=90)
+
+    draw.rectangle((90, 860, 2310, 1150), outline="black", width=3)
+    attack = "Attack: history rewritten and re-signed with the stolen source key"
+    attack_font = base.find_font(24, bold=True)
+    draw.rectangle((100, 866, 120 + draw.textlength(attack, font=attack_font), 904), fill="white")
+    _label(draw, (110, 872), attack, 24, True)
+    message(980, "source", "witness", "POST /checkpoints  (rewritten block j)", 6)
+    self_note(1060, "witness", "Different block for number j: refuse, record equivocation", 7, height=90)
+    message(1120, "witness", "source", "409 Conflict", 8, reply=True)
+
+    message(1260, "auditor", "witness", "GET /checkpoints?signer=source", 9)
+    message(1360, "witness", "auditor", "Witnessed chain (signed blocks)", 10, reply=True)
+    self_note(1470, "auditor", "Compare with the local ledger and check ack signatures", 11, height=90, left=True)
+    draw.rounded_rectangle((1540, 1560, 2330, 1730), radius=16, fill=WHITE, outline="black", width=4)
+    base.center_text(draw, (1540, 1560, 2330, 1730), "Verdict: pass, partial (quorum unreachable) or fail (truncation, mismatch, forged ack)", base.find_font(24, bold=True), spacing=4)
+    base.arrow(draw, (lanes["auditor"], 1515), (lanes["auditor"], 1560))
+    canvas.save(out, dpi=(220, 220))
+    return out
+
+
+# ------------------------------------------------------------- live deployment
+
+def live_deployment(out: Path) -> Path:
+    canvas, draw = _canvas(2400, 1500, "Live Capture Deployment (evaluation setup)")
+    font = base.find_font(25, bold=True)
+    small = base.find_font(22)
+    _group(draw, (40, 110, 2360, 1440), "Windows host", fill=WHITE)
+    _group(draw, (90, 180, 2310, 1400), "WSL2 virtual machine", fill=LIGHT)
+    _group(draw, (140, 250, 1040, 1060), "Fedora WSL distribution", fill=WHITE)
+    base.box(draw, (200, 340, 980, 460), "Project repository (bind-mounted into containers)", font)
+    base.box(draw, (200, 540, 980, 660), "results/LIVE_REPORT.md and live-summary.json", font)
+    base.box(draw, (200, 740, 980, 860), "Docker CLI (sudo); nothing installed for B-SCAF", small)
+    _group(draw, (1090, 250, 2260, 1060), "Docker Desktop: privileged container bscaf-live (--pid=host)", fill=MID)
+    base.box(draw, (1140, 340, 1640, 470), "Workload: files, /bin/true, TCP connect", font)
+    base.box(draw, (1720, 340, 2210, 470), "Witnesses 1-3 (HTTPS)", font)
+    base.box(draw, (1140, 590, 1640, 720), "bpftrace program (generated)", font)
+    base.box(draw, (1720, 590, 2210, 720), "bscaf ingest-ebpf: chain, Merkle, sign every 1 s", font)
+    base.box(draw, (1720, 840, 2210, 970), "events.jsonl, checkpoints.jsonl, acks", font)
+    draw.rounded_rectangle((140, 1130, 2260, 1340), radius=20, fill=WHITE, outline="black", width=4)
+    _label(draw, (1200, 1160), "Linux kernel 6.18 (shared by every process in the VM)", 30, True, "ma")
+    _label(draw, (1200, 1215), "syscall tracepoints: sys_enter_* saves arguments, sys_exit_* emits them with the return code", 24, False, "ma")
+    _label(draw, (1200, 1260), "audit control is refused from container PID namespaces; eBPF is not", 24, False, "ma")
+    base.routed_arrow(draw, [(1390, 470), (1390, 520), (1080, 520), (1080, 1130)])
+    _label(draw, (1100, 1085), "system calls", 22)
+    base.arrow(draw, (1300, 1130), (1300, 720))
+    _label(draw, (1320, 1000), "perf buffer", 22)
+    base.arrow(draw, (1640, 655), (1720, 655))
+    _label(draw, (1680, 600), "lines", 22, False, "ma")
+    base.arrow(draw, (1965, 720), (1965, 840))
+    base.arrow(draw, (1965, 590), (1965, 470))
+    _label(draw, (1985, 520), "each block", 22)
+    base.routed_arrow(draw, [(1720, 905), (1060, 905), (1060, 600), (980, 600)])
+    _label(draw, (1500, 868), "summaries", 22, False, "ma")
+    canvas.save(out, dpi=(220, 220))
+    return out
+
+
+# ------------------------------------------------------------- verification flow
+
+def verification_flow(out: Path) -> Path:
+    canvas, draw = _canvas(2400, 1900, "Verification Decision Flow")
+    font = base.find_font(25, bold=True)
+    small = base.find_font(24, bold=True)
+    steps = [
+        (160, "Recompute every event hash and previous-hash link"),
+        (310, "Rebuild each batch Merkle root from the events"),
+        (460, "Check block hashes, links, numbers, ranges, replays, Ed25519 signatures"),
+    ]
+    for y, text in steps:
+        base.box(draw, (650, y, 1450, y + 100), text, font)
+    for (y, _), (ny, _) in zip(steps, steps[1:]):
+        base.arrow(draw, (1050, y + 100), (1050, ny))
+    _diamond(draw, (1050, 720), 300, 120, "Any local problem?", small)
+    base.arrow(draw, (1050, 560), (1050, 600))
+    base.box(draw, (1700, 660, 2250, 780), "FAIL: report the first invalid item", font)
+    base.arrow(draw, (1350, 720), (1700, 720))
+    _label(draw, (1520, 680), "yes", 24, True, "ma")
+    _diamond(draw, (1050, 990), 300, 120, "Witnesses given?", small)
+    base.arrow(draw, (1050, 840), (1050, 870))
+    _label(draw, (1070, 842), "no", 24, True)
+    base.box(draw, (650, 1180, 1450, 1280), "Fetch each witness chain; compare block by block; check ack signatures", font)
+    base.arrow(draw, (1050, 1110), (1050, 1180))
+    _label(draw, (1070, 1120), "yes", 24, True)
+    _diamond(draw, (1050, 1420), 300, 110, "Truncation, mismatch or forged ack?", small)
+    base.arrow(draw, (1050, 1280), (1050, 1310))
+    base.routed_arrow(draw, [(1350, 1420), (1975, 1420), (1975, 780)])
+    _label(draw, (1660, 1380), "yes", 24, True, "ma")
+    _diamond(draw, (1050, 1680), 300, 110, "Quorum of complete, consistent witnesses?", small)
+    base.arrow(draw, (1050, 1530), (1050, 1570))
+    _label(draw, (1070, 1535), "no", 24, True)
+    base.box(draw, (1700, 1620, 2250, 1740), "PARTIAL: evidence not independently confirmed", font)
+    base.arrow(draw, (1350, 1680), (1700, 1680))
+    _label(draw, (1520, 1640), "no", 24, True, "ma")
+    _diamond(draw, (380, 1280), 250, 110, "Uncommitted events?", small)
+    base.routed_arrow(draw, [(750, 990), (380, 990), (380, 1170)])
+    _label(draw, (560, 950), "no", 24, True, "ma")
+    base.routed_arrow(draw, [(750, 1680), (380, 1680), (380, 1390)])
+    _label(draw, (560, 1640), "yes", 24, True, "ma")
+    base.box(draw, (30, 1470, 230, 1570), "PARTIAL", font)
+    base.box(draw, (530, 1470, 730, 1570), "PASS", font)
+    base.arrow(draw, (130, 1280), (130, 1470))
+    _label(draw, (110, 1350), "yes", 24, True, "ra")
+    base.arrow(draw, (630, 1280), (630, 1470))
+    _label(draw, (650, 1350), "no", 24, True)
+    canvas.save(out, dpi=(220, 220))
+    return out
+
+
+def build_all(out_dir: Path) -> dict[str, Path]:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    return {
+        "evidence": evidence_structure(out_dir / "diagram-evidence-structure.png"),
+        "sequence": witness_sequence(out_dir / "diagram-witness-sequence.png"),
+        "deployment": live_deployment(out_dir / "diagram-live-deployment.png"),
+        "verification": verification_flow(out_dir / "diagram-verification-flow.png"),
+    }
