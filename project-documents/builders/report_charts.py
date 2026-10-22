@@ -1,10 +1,12 @@
 """Result charts for the final report, drawn with matplotlib from the JSON result snapshots.
 
+Only the three essential results are charted (live overhead, attack
+detection, throughput); everything else is in the report's tables and text.
+
 Visual rules: one quiet chrome (hairline grid, muted axes, text in ink tokens),
 thin bars with a rounded data end and a square baseline, values labeled at the
-bar tip, a legend only when two or more series share a chart, one y-scale per
-chart (different measures become small multiples), and categorical colors in a
-fixed, validated order (blue, orange, aqua; checked for colour-vision
+bar tip, a legend only when two or more series share a chart, and categorical
+colors in a fixed, validated order (blue, orange; checked for colour-vision
 deficiency against a white page).
 """
 
@@ -17,11 +19,10 @@ import matplotlib
 matplotlib.use("Agg")
 from matplotlib import font_manager  # noqa: E402
 from matplotlib.patches import PathPatch, Patch  # noqa: E402
-from matplotlib.lines import Line2D  # noqa: E402
 from matplotlib.path import Path as MplPath  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 
-BLUE, ORANGE, AQUA = "#2a78d6", "#eb6834", "#1baf7a"
+BLUE, ORANGE = "#2a78d6", "#eb6834"
 INK, INK_2, MUTED = "#0b0b0b", "#52514e", "#898781"
 GRID, AXIS, NEUTRAL = "#e1e0d9", "#c3c2b7", "#d9d8d2"
 DPI = 220
@@ -117,16 +118,6 @@ def _compact(value: float) -> str:
 
 # ------------------------------------------------------------------ charts
 
-def ingest_before_after(real: dict, out: Path) -> Path:
-    everything = real["ingest"]["all_syscalls"]
-    fig, (left, right) = plt.subplots(1, 2, figsize=(WIDTH, 2.3), gridspec_kw={"wspace": 0.35})
-    _vbars(left, ["Earlier prototype", "Final system"], [89, everything["files"]], [ORANGE, BLUE], lambda v: f"{v:.0f} / 100", ymax=118)
-    left.set_title("Files ingested without aborting")
-    _vbars(right, ["Earlier prototype", "Final system"], [46, everything["accepted"]], [ORANGE, BLUE], lambda v: f"{v:,.0f}", ymax=everything["accepted"] * 1.22)
-    right.set_title("Events committed (all system calls)")
-    return _save(fig, out)
-
-
 def live_overhead(live: dict, out: Path) -> Path:
     phases = ["baseline", "tracing only", "B-SCAF"]
     names = ["No tracing", "eBPF tracing only", "B-SCAF capture\n+ 3 witnesses"]
@@ -143,16 +134,6 @@ def live_overhead(live: dict, out: Path) -> Path:
         ax.text(index, max(runs) + max(medians) * 0.04, label, ha="center", va="bottom", color=INK, fontsize=8)
     ax.set_ylabel("Workload time (s)")
     ax.set_title(f"Live workload time ({live['iterations']:,} iterations): median bar, individual runs as dots")
-    return _save(fig, out)
-
-
-def live_syscalls(live: dict, out: Path) -> Path:
-    counts = live["phases"]["B-SCAF"][0]["syscalls"]
-    items = sorted(counts.items(), key=lambda item: -item[1])
-    fig, ax = plt.subplots(figsize=(WIDTH, 0.32 * len(items) + 0.8))
-    _hbars(ax, [name for name, _ in items], [count for _, count in items], [BLUE] * len(items), lambda v: f"{v:,.0f}")
-    ax.set_title("System calls captured host-wide during one live run")
-    ax.xaxis.set_major_formatter(lambda value, _: _compact(value))
     return _save(fig, out)
 
 
@@ -175,53 +156,6 @@ def replay_throughput(real: dict, out: Path) -> Path:
     ax.xaxis.set_major_formatter(lambda value, _: _compact(value))
     ax.set_xlabel("Events per second (one core)")
     ax.set_title(f"Ingest throughput, {real['bench']['events']:,} replayed events")
-    ax.legend(handles=[Patch(color=ORANGE, label="Baseline logging"), Patch(color=BLUE, label="B-SCAF")], loc="lower right")
-    return _save(fig, out)
-
-
-def replay_latency(real: dict, out: Path) -> Path:
-    rows = _bench(real)
-    positions = list(range(len(rows)))[::-1]
-    fig, ax = plt.subplots(figsize=(WIDTH, 0.34 * len(rows) + 1.0))
-    xmax = max(row["latency_us_p95"] for row in rows) * 1.18
-    ax.set_xlim(0, xmax)
-    ax.set_ylim(-0.6, len(rows) - 0.4)
-    ax.set_yticks(positions, [row["label"] for row in rows])
-    ax.tick_params(axis="y", length=0)
-    ax.spines["left"].set_visible(False)
-    ax.grid(axis="x", color=GRID, linewidth=0.8, zorder=0)
-    for position, row in zip(positions, rows):
-        ax.plot([row["latency_us_median"], row["latency_us_p95"]], [position, position], color=AXIS, linewidth=2, solid_capstyle="round", zorder=2)
-        ax.scatter([row["latency_us_median"]], [position], s=34, color=BLUE, edgecolor="white", linewidth=1.5, zorder=4)
-        ax.scatter([row["latency_us_p95"]], [position], s=34, color=ORANGE, edgecolor="white", linewidth=1.5, zorder=4)
-        ax.text(row["latency_us_p95"] + xmax * 0.015, position, f"{row['latency_us_p95']:.0f}", va="center", color=INK, fontsize=8)
-    ax.set_xlabel("Per-event processing latency (µs)")
-    ax.set_title("Per-event latency: median and 95th percentile")
-    ax.legend(handles=[Line2D([], [], marker="o", linestyle="", color=BLUE, label="Median"), Line2D([], [], marker="o", linestyle="", color=ORANGE, label="95th percentile")], loc="lower right")
-    return _save(fig, out)
-
-
-def batch_tradeoff(real: dict, out: Path) -> Path:
-    rows = [row for row in _bench(real) if row["mode"] == "bscaf" and not row["fsync"]]
-    labels = [row["label"].replace("B-SCAF ", "") for row in rows]
-    fig, (left, right) = plt.subplots(1, 2, figsize=(WIDTH, 2.4), gridspec_kw={"wspace": 0.45})
-    _hbars(left, labels, [row["events_per_second"] for row in rows], [BLUE] * len(rows), lambda v: f"{v / 1000:.1f}K")
-    left.xaxis.set_major_formatter(lambda value, _: _compact(value))
-    left.set_title("Throughput (events/s)")
-    _hbars(right, labels, [row["commit_delay_ms_median"] for row in rows], [AQUA] * len(rows), lambda v: f"{v:.1f} ms")
-    right.set_title("Median delay until signed (ms)")
-    fig.subplots_adjust(top=0.78)
-    fig.suptitle("Block size trades throughput against commit delay", x=0.02, ha="left", fontsize=9.5, fontweight="bold", y=1.0)
-    return _save(fig, out)
-
-
-def storage(real: dict, out: Path) -> Path:
-    rows = [row for row in _bench(real) if not row["fsync"]]
-    fig, ax = plt.subplots(figsize=(WIDTH, 0.34 * len(rows) + 1.0))
-    _hbars(ax, [row["label"] for row in rows], [row["bytes_per_event"] for row in rows],
-           [ORANGE if _is_baseline(row) else BLUE for row in rows], lambda v: f"{v:.0f} B")
-    ax.set_xlabel("Bytes stored per event (events + checkpoints)")
-    ax.set_title("Storage cost per event")
     ax.legend(handles=[Patch(color=ORANGE, label="Baseline logging"), Patch(color=BLUE, label="B-SCAF")], loc="lower right")
     return _save(fig, out)
 
@@ -254,27 +188,10 @@ def attack_grid(real: dict, out: Path) -> Path:
     return _save(fig, out)
 
 
-def dataset_syscalls(real: dict, out: Path) -> Path:
-    counts = real["syscalls"]["all"]
-    items = sorted(counts.items(), key=lambda item: -item[1])
-    default = real["syscalls"]["default"]
-    fig, ax = plt.subplots(figsize=(WIDTH, 0.3 * len(items) + 1.0))
-    _hbars(ax, [name for name, _ in items], [count for _, count in items],
-           [BLUE if name in default else AQUA for name, _ in items], lambda v: f"{v:,.0f}")
-    ax.set_title("System calls committed from the public auditd dataset")
-    ax.legend(handles=[Patch(color=BLUE, label="Kept by the default policy"), Patch(color=AQUA, label="Kept only with --all-syscalls")], loc="lower right")
-    return _save(fig, out)
-
-
 def build_all(real: dict, live: dict, out_dir: Path) -> dict[str, Path]:
+    """The three essential result charts: live overhead, attack detection and throughput."""
     return {
-        "ingest": ingest_before_after(real, out_dir / "chart-ingest.png"),
-        "dataset_syscalls": dataset_syscalls(real, out_dir / "chart-dataset-syscalls.png"),
         "live_overhead": live_overhead(live, out_dir / "chart-live-overhead.png"),
-        "live_syscalls": live_syscalls(live, out_dir / "chart-live-syscalls.png"),
         "attacks": attack_grid(real, out_dir / "chart-attacks.png"),
         "throughput": replay_throughput(real, out_dir / "chart-throughput.png"),
-        "latency": replay_latency(real, out_dir / "chart-latency.png"),
-        "tradeoff": batch_tradeoff(real, out_dir / "chart-batch-tradeoff.png"),
-        "storage": storage(real, out_dir / "chart-storage.png"),
     }

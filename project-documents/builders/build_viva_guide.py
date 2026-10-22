@@ -25,7 +25,6 @@ import report_diagrams  # noqa: E402
 DATA_DIR = base.DOCUMENTS_DIR / "data"
 OUTPUT = base.DOCUMENTS_DIR / "B-SCAF_Code_Guide_Setup_and_Viva_Preparation.docx"
 REPO = "https://github.com/AdityaVKochar/os_block.git"
-BRANCH = "feature/real-data-validation"
 
 FIGURE = {"n": 0}
 
@@ -470,7 +469,7 @@ def viva_questions(n: dict) -> list[tuple[str, list[tuple[str, str]]]]:
             ("How reproducible are your results?",
              "Fully scripted: one command per experiment, all in Docker; the dataset is pinned by commit and checksums; the results are saved as JSON; and the report and this guide are generated from those JSON files, so no number is typed by hand."),
             ("What do the charts in your report show?",
-             "Ingestion before and after the parser fixes; the mix of system calls in the dataset; live workload time per setup with each run shown as a dot; system calls captured across the whole machine; a grid of the twelve attacks with and without witnesses; throughput, per-event time and storage per configuration; and how block size trades speed against sealing delay."),
+             "Only the three essential results: live workload time for each setup, with every run shown as a dot; a grid of the twelve attacks showing the verdict with and without witnesses; and throughput per configuration compared with plain logging and a hash chain. Everything else is in the report's tables."),
         ]),
         ("G. Comparison with existing work", [
             ("How is this different from sending logs to a central server or a SIEM?",
@@ -644,7 +643,7 @@ def build() -> None:
         ("5", "How the pieces fit", "Architecture figure (report Figure 1)"),
         ("6", "Why witnesses: the stolen-key attack", "Witness protocol figure (report Figure 4)"),
         ("7", "Results: completeness and overhead", "Live overhead chart and the 100% completeness table"),
-        ("8", "Results: every attack detected", "Attack grid (report Figure 10)"),
+        ("8", "Results: every attack detected", "Attack grid (report Figure 7)"),
         ("9", "Honest limits and future work", "Capture trust, key custody, scale"),
         ("10", "Demo or questions", "bscaf demo, a manual edit, the attack matrix"),
     ], widths=[0.6, 3.0, 2.6])
@@ -753,7 +752,7 @@ def build() -> None:
         "About 2 GB of free disk space and an internet connection for the first build and the dataset download.",
         "For live capture only: a Linux kernel with eBPF support. It was tested on WSL2 through Docker Desktop; it should work on a normal Linux machine; on macOS it is untested.",
     ])
-    base.add_body(doc, f"The project lives at {REPO}. Until the work is merged into the main branch, it is on the branch {BRANCH}, so the commands below check that branch out.")
+    base.add_body(doc, f"The code is on GitHub at {REPO} (branch master). The repository is private, so the first time git asks, sign in with a GitHub account that has access: on Windows and macOS a browser window opens; on Linux, run gh auth login first or use a personal access token as the password. Anyone else needs to be added as a collaborator on GitHub, or you can simply give them a copy of the project folder, for example as a ZIP file, and skip the git clone step.")
 
     base.add_heading(doc, "5.2 Windows (PowerShell)", 2)
     base.add_bullets(doc, [
@@ -764,7 +763,6 @@ def build() -> None:
     report.code(doc, f"""
 git clone {REPO}
 cd os_block
-git checkout {BRANCH}
 docker build -t bscaf .
 docker run --rm -v "${{PWD}}:/app" bscaf pytest -q
 docker run --rm -v "${{PWD}}:/app" -w /app bscaf bscaf --data-dir demo --batch-size 2 demo
@@ -776,7 +774,6 @@ docker run --rm -v "${{PWD}}:/app" -w /app bscaf bscaf --data-dir demo --batch-s
     report.code(doc, f"""
 git clone {REPO}
 cd os_block
-git checkout {BRANCH}
 docker build -t bscaf .
 docker run --rm -v "$PWD":/app bscaf pytest -q
 docker run --rm -v "$PWD":/app -w /app bscaf bscaf --data-dir demo --batch-size 2 demo
@@ -790,7 +787,6 @@ sudo dnf install -y moby-engine git && sudo systemctl enable --now docker   # Fe
 sudo usermod -aG docker $USER      # then log out and back in, or put sudo before docker
 git clone {REPO}
 cd os_block
-git checkout {BRANCH}
 docker build -t bscaf .
 docker run --rm -v "$PWD":/app bscaf pytest -q
 """)
