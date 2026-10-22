@@ -257,3 +257,104 @@ def build_all(out_dir: Path) -> dict[str, Path]:
         "deployment": live_deployment(out_dir / "diagram-live-deployment.png"),
         "verification": verification_flow(out_dir / "diagram-verification-flow.png"),
     }
+
+
+# ------------------------------------------------------------- guide: module map
+
+def module_map(out: Path) -> Path:
+    """Which code files exist and which layer each belongs to (read top to bottom)."""
+    canvas, draw = _canvas(2400, 1930, "How the Code Is Organised")
+    font = base.find_font(24, bold=True)
+    layers = [
+        ("Entry points: how a person or script starts the system", [
+            ("cli.py + __main__.py", "every bscaf command"),
+            ("ui.py", "web dashboard"),
+            ("scripts/*.py", "experiments and downloads"),
+        ]),
+        ("Collectors: where events come from", [
+            ("ebpf.py", "live capture from the kernel"),
+            ("auditd.py", "existing audit logs"),
+            ("JSONL input (cli.py)", "events from other tools"),
+        ]),
+        ("Core pipeline: turning events into evidence", [
+            ("policy.py", "keep, redact, truncate"),
+            ("models.py + canonical.py", "fixed record, stable hash"),
+            ("service.py", "chain, batch, seal, verify, search"),
+            ("store.py", "append-only files, lock"),
+        ]),
+        ("Cryptography: the seals", [
+            ("merkle.py", "batch root, proof path"),
+            ("crypto.py", "Ed25519 keys and signatures"),
+            ("proof.py", "check one event offline"),
+        ]),
+        ("Independent copies", [
+            ("witness.py", "witness server, quorum, comparison"),
+            ("tlsutil.py", "HTTPS and mutual TLS"),
+        ]),
+        ("Evaluation and quality", [
+            ("attacks.py", "12 tampering scenarios"),
+            ("bench.py", "performance experiment"),
+            ("tests/", "48 automated tests"),
+        ]),
+    ]
+    top, band_height, gap = 110, 260, 40
+    for index, (title, boxes) in enumerate(layers):
+        y = top + index * (band_height + gap)
+        _group(draw, (40, y, 2360, y + band_height), title, fill=LIGHT if index % 2 == 0 else MID)
+        width = (2360 - 40 - 60 - (len(boxes) - 1) * 40) / len(boxes)
+        for position, (name, role) in enumerate(boxes):
+            x = 70 + position * (width + 40)
+            draw.rounded_rectangle((x, y + 70, x + width, y + band_height - 25), radius=16, fill=WHITE, outline="black", width=4)
+            _label(draw, (x + width / 2, y + 100), name, 27, True, "ma")
+            _label(draw, (x + width / 2, y + 150), role, 23, False, "ma")
+        if index < len(layers) - 1:
+            base.arrow(draw, (1200, y + band_height), (1200, y + band_height + gap))
+    canvas.save(out, dpi=(220, 220))
+    return out
+
+
+# ------------------------------------------------------------- guide: life of one event
+
+def event_lifecycle(out: Path) -> Path:
+    """One system call travelling through the files, in ten numbered steps."""
+    canvas, draw = _canvas(2400, 1190, "Life of One System Call Through the Code")
+    font = base.find_font(25, bold=True)
+    small = base.find_font(22)
+    steps = [
+        ("1. A program asks the kernel", "e.g. open /etc/passwd"),
+        ("2. Kernel hook fires", "bpftrace program from ebpf.py"),
+        ("3. Line becomes an event", "ebpf.py (or auditd.py)"),
+        ("4. Keep or drop, hide secrets", "policy.py"),
+        ("5. Fixed record, chained hash", "models.py, canonical.py"),
+        ("10. Check everything later", "service.py, witness.py, proof.py"),
+        ("9. Copies to witnesses", "witness.py, tlsutil.py"),
+        ("8. Block signed and stored", "crypto.py, store.py"),
+        ("7. Merkle root of the batch", "merkle.py"),
+        ("6. Appended, batch grows", "service.py, store.py"),
+    ]
+    width, height = 400, 230
+    xs = [60 + index * (width + 65) for index in range(5)]
+    rows = [200, 760]
+    for index, (title, files) in enumerate(steps):
+        row = 0 if index < 5 else 1
+        x = xs[index % 5]
+        y = rows[row]
+        draw.rounded_rectangle((x, y, x + width, y + height), radius=18, fill=WHITE if row == 0 else LIGHT, outline="black", width=4)
+        base.center_text(draw, (x + 10, y + 20, x + width - 10, y + 130), title, font, spacing=4)
+        base.center_text(draw, (x + 10, y + 130, x + width - 10, y + height - 15), files, small, spacing=3)
+    for index in range(4):
+        base.arrow(draw, (xs[index] + width, rows[0] + height / 2), (xs[index + 1], rows[0] + height / 2))
+        base.arrow(draw, (xs[index + 1], rows[1] + height / 2), (xs[index] + width, rows[1] + height / 2))
+    base.routed_arrow(draw, [(xs[4] + width / 2, rows[0] + height), (xs[4] + width / 2, rows[1])])
+    _label(draw, (1200, 1065), "Steps 1-6 happen for every event. Steps 7-9 happen once per block (every N events or T seconds).", 25, False, "ma")
+    _label(draw, (1200, 1115), "Step 10 runs whenever someone asks: bscaf verify, bscaf proof / proof-verify, or the dashboard.", 25, False, "ma")
+    canvas.save(out, dpi=(220, 220))
+    return out
+
+
+def build_guide_diagrams(out_dir: Path) -> dict[str, Path]:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    return {
+        "modules": module_map(out_dir / "guide-module-map.png"),
+        "lifecycle": event_lifecycle(out_dir / "guide-event-lifecycle.png"),
+    }

@@ -195,7 +195,11 @@ def build() -> None:
     bench = {row["label"]: row for row in real.get("bench", {}).get("results", [])}
     live_events = statistics.median(run["events"] for run in live_runs)
     live_complete = min(run["completeness"]["ratio"] for run in live_runs)
+    workload_ops = live_runs[0]["completeness"]["expected"]
     attacks_ok = sum(row["as_expected"] for row in real["attacks"])
+    lost = [run["collector"]["lost_events"] for run in live_runs]
+    full_slowdown = overview["B-SCAF"]["slowdown_percent"]
+    tracing_slowdown = overview["tracing only"]["slowdown_percent"]
 
     # Title page
     p = doc.add_paragraph()
@@ -217,61 +221,67 @@ def build() -> None:
 
     base.add_heading(doc, "Abstract", 1)
     base.add_body(doc, (
-        "Operating-system audit logs underpin incident response and forensics, yet a privileged attacker can edit or delete them on the host that produced them. "
-        "This project designed, implemented and evaluated B-SCAF, a lightweight permissioned framework that makes Linux system-call evidence tamper-evident without a public blockchain. "
-        "System calls are captured live through eBPF tracepoints or imported from auditd logs, minimized by a versioned privacy policy, chained with SHA-256, grouped into Merkle batches and committed in Ed25519-signed checkpoint blocks. "
-        "Blocks are replicated to a quorum of independent witnesses that enforce chain continuity and return signed acknowledgements, so verification can detect even a history rewritten and re-signed with a stolen host key. "
-        f"On 100 real auditd logs from the public Splunk Attack Data repository, the framework ingested every file and committed {everything.get('accepted', 0)} events, compared with 46 events and 11 aborted files for the earlier prototype. "
-        f"In live capture on a WSL2 6.18 kernel, the eBPF collector recorded about {live_events:,.0f} host-wide events per run, captured {100 * live_complete:.0f}% of the operations performed by a repeatable workload, "
-        f"and slowed that workload by {overview['B-SCAF']['slowdown_percent']:.0f}%, against {overview['tracing only']['slowdown_percent']:.0f}% for eBPF tracing alone; the two are within run-to-run variation, so the cost comes from kernel-side tracing rather than from hashing, signing and replication. "
-        f"All {attacks_ok} attack scenarios, including tail truncation and re-signing with a stolen key, were detected as designed."
+        "System-call logs are often the best evidence an investigator has after a break-in. Unfortunately they usually sit on the very machine the attacker now controls, and anyone with root access can quietly rewrite them. "
+        "In this project we built B-SCAF, a lightweight framework that makes such logs tamper-evident without relying on a public blockchain. "
+        "B-SCAF records security-relevant system calls, either live through eBPF or from existing auditd logs, strips out sensitive values, links every record to the one before it with SHA-256, and seals small batches into Ed25519-signed blocks. "
+        "Copies of each block go to independent witness machines, so even an attacker who steals the signing key and rewrites history gets caught. "
+        f"We tested the system in two ways. On {real['dataset']['files']} real audit logs from the public Splunk Attack Data collection it ingested every file and committed {everything.get('accepted', 0)} events, where our first prototype managed 46 events and crashed on 11 files. "
+        f"In live capture on a WSL2 kernel it recorded all {workload_ops:,} operations of a repeatable workload in every run ({100 * live_complete:.0f}% completeness), with roughly {live_events:,.0f} host-wide events captured per run. "
+        f"Full capture slowed that deliberately system-call-heavy workload by about {full_slowdown:.0f}%, which is within run-to-run noise of the cost of kernel tracing alone ({tracing_slowdown:.0f}%). "
+        f"All {attacks_ok} attack scenarios we tried, including deleting the newest block and re-signing a forged history, were detected."
     ))
     base.add_body(doc, "Keywords: system-call auditing; eBPF; tamper-evident logging; permissioned ledger; Merkle tree; witness quorum; digital forensics.", bold_lead="Keywords:")
 
     base.add_heading(doc, "1. Introduction", 1)
-    base.add_body(doc, "Every security-relevant action on a Linux host, such as running a program, opening a file, changing permissions, assuming another identity or connecting to the network, crosses the kernel boundary as a system call. A faithful record of these calls lets an investigator reconstruct an intrusion. The difficulty is that the record usually lives on the machine under attack: an intruder with root privileges can alter, delete, reorder or replace the very evidence that would expose them.")
-    base.add_body(doc, "B-SCAF (Blockchain-Based System Call Audit Framework) applies blockchain principles without a cryptocurrency network. Raw events remain local and searchable, while compact cryptographic commitments are signed, linked and held by independent witnesses. This report describes the final system, its threat model and implementation, and an evaluation on recorded attack data and on live host activity.")
+    base.add_body(doc, "Think about what an investigator has to work with after a server has been broken into. The most useful record is usually the trail of system calls: which programs ran, which files were opened or deleted, which permissions changed and where the machine connected to. Every one of these actions has to pass through the operating-system kernel, so the trail is very hard for malware to avoid.")
+    base.add_body(doc, "The trouble is where that trail is kept. It is normally written to a file on the same machine, and anyone who gains root there can edit it, delete parts of it or replace it altogether. Sending logs to a central server helps if the machine dies, but then the administrator of that server becomes the person everyone has to trust.")
+    base.add_body(doc, "B-SCAF (Blockchain-Based System Call Audit Framework) takes a different route. It borrows the ideas that make blockchains hard to tamper with, namely hashing, linked blocks, Merkle trees, digital signatures and several independent copies, and leaves out mining, tokens and public consensus. The raw events stay on the host, where they can still be searched, and only small signed summaries are shared with witnesses. This report walks through the design, the threat model, how we built the system, and how it behaved on recorded attack data and on live activity.")
 
     base.add_heading(doc, "2. Problem Statement and Objectives", 1)
-    base.add_body(doc, "How can a Linux host record security-relevant system calls so that later tampering is detectable, the evidence can be verified independently of the host, sensitive arguments are protected, and the overhead stays modest? The project brief set four objectives:")
+    base.add_body(doc, "The question we set out to answer was this: how can a Linux machine record its security-relevant system calls so that later tampering is noticed, the evidence can be checked without trusting the machine, private details stay private, and normal work is not slowed down much? The project brief turned that into four objectives:")
     base.add_bullets(doc, [
-        "Objective 1: capture configurable security-relevant system calls with process, user, time, result and selected arguments.",
-        "Objective 2: build a lightweight immutable evidence chain using canonical records, hash links, Merkle batches and signed checkpoints.",
-        "Objective 3: provide independent verification with a clear pass, fail or partial-evidence report.",
-        "Objective 4: measure throughput, capture-to-commit delay, CPU and memory overhead, storage growth and verification time.",
+        "Capture a configurable set of security-relevant system calls, together with the process, user, time, result and the important arguments.",
+        "Build a lightweight, tamper-evident evidence chain from canonical records, hash links, Merkle batches and signed checkpoints.",
+        "Let anyone verify the evidence independently and get a clear answer: pass, fail or partial evidence.",
+        "Measure what it costs: throughput, delay until evidence is sealed, CPU and memory use, storage growth and verification time.",
     ])
 
     base.add_heading(doc, "3. Research Gap and Contribution", 1)
-    base.add_body(doc, "Blockchain logging research has shown the value of immutable audit trails for cloud, healthcare and IoT records, and system-call research has shown that call sequences are strong intrusion signals. Few systems treat host system calls as durable forensic evidence that must survive a privileged compromise. B-SCAF contributes a practical integration of established mechanisms:")
+    base.add_body(doc, "There is plenty of work on blockchain-backed logging, but most of it protects cloud, healthcare or IoT records, and a lot of it puts more data on the chain than it needs to. There is also a large body of research that uses system-call sequences to detect intrusions, but it generally takes for granted that the data it learns from is genuine. We found very little that treats host system calls as forensic evidence that has to survive a root-level compromise.")
+    base.add_body(doc, "What B-SCAF adds is the combination, built and measured end to end:")
     base.add_bullets(doc, [
-        "A kernel-to-proof pipeline from eBPF or auditd capture to deterministic, verifiable event records.",
-        "Dual-level integrity: an event hash chain for order and Merkle batch roots for compact commitments and per-event proofs.",
-        "A permissioned witness quorum that holds only signed metadata, enforces chain continuity, records equivocation and signs acknowledgements.",
-        "Privacy by design: an allow-list, key-based and inline secret redaction, and a policy version bound into every block.",
-        "Failure-aware verification that names the first invalid item and distinguishes fail from partial evidence.",
+        "capture straight from the kernel with eBPF, or from existing auditd logs, turned into records that always hash the same way;",
+        "two layers of integrity: a hash chain that protects the order of events, and Merkle roots that seal each batch and allow proofs about single events;",
+        "witnesses that keep only signed summaries, refuse conflicting versions of history and sign a receipt for every block they accept;",
+        "privacy filtering before anything is stored, with the version of the filtering rules written into every block;",
+        "verification that points to exactly where the evidence breaks, and says \"partial\" rather than \"pass\" when it cannot be sure.",
     ])
-    base.add_body(doc, "The project does not claim to invent hashing, Merkle trees, signatures or distributed ledgers; its contribution is the integration and its evaluation on real data.")
+    base.add_body(doc, "None of these building blocks are new, and we do not claim they are. The contribution is putting them together for operating-system evidence and testing the result on real data.")
 
     base.add_heading(doc, "4. Threat Model", 1)
-    base.add_body(doc, "Protected assets are the integrity, order and origin of committed events, their availability through witness copies, and the confidentiality of argument values. The attacker is assumed to gain root on the source host after collection: they can edit, delete, insert or reorder ledger lines, read the source signing key and re-sign a rewritten history, and take some witnesses offline.")
-    base.add_body(doc, "B-SCAF guarantees that any change to committed evidence is reported, provided the verifier trusts the source public key and a quorum of witnesses is honest and reachable. It does not guarantee the honesty of a compromised kernel or collector before capture, it cannot protect events that are not yet in a signed and replicated block, and if the quorum is unreachable the verdict is partial rather than pass.")
+    base.add_body(doc, "We assume the worst realistic case. Some time after events have been recorded, an attacker gets root on the monitored machine. From there they can edit, delete, insert or reorder lines in the evidence files, read the signing key and use it to re-sign a rewritten history, and knock some of the witnesses offline.")
+    base.add_body(doc, "Under those conditions B-SCAF promises one thing: any change to evidence that was already sealed will be reported, as long as the verifier has the genuine public key and enough witnesses (the quorum) are honest and reachable. It cannot vouch for events that a compromised kernel or collector invented or dropped before they were recorded. It cannot protect events that have not yet been sealed into a replicated block. And if too few witnesses can be reached, it reports partial evidence instead of a clean pass.")
 
     base.add_heading(doc, "5. System Design", 1)
-    base.add_body(doc, "Figure 1 shows the implemented architecture. Trust is separated: the audited host stores detailed evidence and produces signed commitments; witnesses keep the commitments; any auditor can verify both.")
+    base.add_body(doc, "Figure 1 shows how the pieces fit together. The design splits trust three ways: the monitored host keeps the detailed evidence and produces signed summaries, the witnesses keep copies of those summaries, and an auditor can check both without having to trust either.")
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p.paragraph_format.keep_with_next = True
     p.add_run().add_picture(str(DIAGRAM), width=Inches(6.3))
     caption(doc, "Figure 1. B-SCAF collection, evidence construction, signed ledger, witness quorum and verification.")
 
-    base.add_heading(doc, "5.1 Collection", 2)
-    base.add_body(doc, "The eBPF collector generates a bpftrace program that attaches to the entry and exit tracepoints of the policy's system calls. Arguments saved at entry are emitted with the return code at exit, keyed by kernel thread ID so the program also works inside a container's PID namespace; execve records carry the command line and connect/bind records carry decoded socket addresses. The collector learns its own kernel PID with a one-shot probe so it never records its own I/O.")
-    base.add_body(doc, "The auditd adapter reads raw, ENRICHED, node-prefixed and ausearch -i exports. It merges the SYSCALL, EXECVE, PATH, CWD, SOCKADDR and PROCTITLE records of one kernel event, decodes hex-encoded values, maps syscall numbers per architecture (x86_64, aarch64, i386), streams compressed or standard input, follows rotating logs and skips records already ingested.")
-    figure(doc, diagrams["deployment"], "Live-capture deployment used in the evaluation: the eBPF collector runs in a privileged container and traces the shared WSL2 kernel.")
-    base.add_heading(doc, "5.2 Evidence Construction", 2)
-    base.add_body(doc, "Each accepted event is normalized to a fixed schema (sequence, UTC time, host, PID, PPID, UID, system call, process, arguments, return code) and serialized canonically. Its hash covers the previous event's hash. Blocks close after N events, after T seconds of event time, or when the host changes.")
-    figure(doc, diagrams["evidence"], "Evidence structure: each event hash covers its predecessor, a Merkle root commits each batch, and signed blocks link to their predecessor and are copied to every witness.")
+    base.add_heading(doc, "5.1 Collecting System Calls", 2)
+    base.add_body(doc, "Our first plan was to capture live events with auditd, the standard Linux audit daemon. That did not work in our environment: Docker Desktop containers cannot take control of the kernel's audit system, because the kernel only accepts audit commands from its initial process namespace. So we wrote a second collector based on eBPF.")
+    base.add_body(doc, "The eBPF collector generates a small bpftrace program that hooks the entry and the exit of each system call in the policy. At entry it notes the arguments; at exit it prints them together with the return code, so every event is complete in a single line. execve records include the full command line, and connect and bind records include the decoded network address. One detail took some debugging: inside a container, a process's ID is not the ID the kernel reports, so the collector first runs a tiny probe to learn its own kernel ID and then filters itself out. Without that step it would happily record its own file writes.")
+    base.add_body(doc, "The auditd adapter handles logs that already exist. Real audit logs turned out to be messier than the examples in the documentation. They come in raw, \"enriched\" and ausearch -i formats, a single kernel event is spread over several records, some values are hex-encoded, and system-call numbers differ between CPU architectures. The adapter groups the records of each event, decodes the values, uses the right system-call table for x86_64, aarch64 or i386, reads compressed files or standard input, can follow a log as it grows, and skips records it has already ingested.")
+    figure(doc, diagrams["deployment"], "The live-capture setup used in the evaluation: the eBPF collector runs in a privileged container and traces the shared WSL2 kernel.")
+
+    base.add_heading(doc, "5.2 Building the Evidence Chain", 2)
+    base.add_body(doc, "Every event that passes the policy is turned into a fixed set of fields (sequence number, UTC time, host, process ID, parent process ID, user ID, system call, program, arguments and return code) and written out in a canonical form, so the same event always produces exactly the same bytes. Its SHA-256 hash includes the hash of the event before it, and that is what ties the evidence into a chain. Events are then grouped into batches. A batch closes when it reaches N events, when it spans T seconds, or when events from a different host arrive.")
+    figure(doc, diagrams["evidence"], "How evidence is protected: each event hash covers the one before it, a Merkle root seals each batch, and signed blocks are linked to each other and copied to every witness.")
+
     base.add_heading(doc, "5.3 Checkpoint Blocks", 2)
+    base.add_body(doc, "Each batch is sealed into a checkpoint block. The table below lists what a block contains; the Ed25519 signature covers all of it.")
     table(doc, ["Field", "Purpose"], [
         ("block_number, previous_block_hash", "Order and linkage of the permissioned chain"),
         ("batch_id, first/last_sequence, event_count", "Exact range of committed events"),
@@ -281,15 +291,18 @@ def build() -> None:
         ("created_at, signer_id, signature, block_hash", "Ed25519 authentication of the block"),
         ("witness acks (stored beside the block)", "Witness-signed receipts proving quorum"),
     ], widths=[2.6, 3.6])
-    base.add_heading(doc, "5.4 Witness Quorum", 2)
-    base.add_body(doc, "Witnesses trust a configured set of source keys. A witness accepts a block only if its hash and signature are valid and it extends the chain that witness already holds; a different block for an existing number is refused with HTTP 409 and stored as equivocation evidence. Each acceptance returns an acknowledgement signed with the witness's own key. Transport is HTTPS with optional mutual TLS, and streaming collectors push each block as soon as it is signed.")
-    figure(doc, diagrams["sequence"], "Witness protocol: replication with signed acknowledgements, refusal of a rewritten block, and independent comparison by an auditor.")
-    base.add_heading(doc, "5.5 Verification", 2)
-    base.add_body(doc, "Local verification recomputes every event hash and link, every Merkle root, block hash, link and signature, and checks block numbering, ranges and replayed batches in a single indexed pass. Verification against witnesses compares the local ledger with each witness copy, which exposes tail truncation and re-signed history, and checks acknowledgement signatures. Verdicts are pass, fail (with the first invalid item) or partial (uncommitted events or witness quorum unreachable). A portable proof contains one event, its Merkle path and its signed block, and verifies with only the source public key.")
 
-    figure(doc, diagrams["verification"], "Verification decision flow leading to a pass, partial or fail verdict.", width=5.8)
+    base.add_heading(doc, "5.4 Witnesses", 2)
+    base.add_body(doc, "A witness is a separate machine that keeps a copy of every block, but never the events themselves. It only accepts blocks from sources it has been told to trust, and only if the block is intact, correctly signed and continues the chain it already holds. If someone offers a different block for a number it has already seen, it refuses (HTTP 409) and keeps the conflicting block as evidence of the attempt. For every block it does accept, it sends back a receipt signed with its own key. Witnesses can run over HTTPS with mutual TLS, and the live collectors push each block to them as soon as it is sealed.")
+    figure(doc, diagrams["sequence"], "The witness protocol: replication with signed receipts, refusal of a rewritten block, and an independent check by an auditor.")
+
+    base.add_heading(doc, "5.5 Verification", 2)
+    base.add_body(doc, "Verification happens in two stages. Locally, the verifier reads every event and every block once and recomputes everything: each event hash and link, each Merkle root, each block hash, link and signature, and the block numbering and ranges, which is also how it catches a replayed block. Then, if witnesses are given, it fetches each witness's copy and compares it with the local ledger block by block. That second step is what catches a deleted tail or a history that was rewritten and re-signed, because both leave the local files perfectly consistent with themselves. It also checks the signatures on the witnesses' receipts.")
+    base.add_body(doc, "The outcome is one of three verdicts: pass; fail, naming the first thing that is wrong; or partial, meaning nothing is wrong but some events are not sealed yet or not enough witnesses could be reached. For sharing a single piece of evidence there is also a portable proof: one event, the few hashes that link it to its block's Merkle root, and the signed block. Anyone with the public key can check it without seeing any other event.")
+    figure(doc, diagrams["verification"], "How the verifier arrives at a pass, partial or fail verdict.", width=5.8)
+
     base.add_heading(doc, "6. Implementation", 1)
-    base.add_body(doc, "B-SCAF is a Python 3.11+ package whose only runtime dependency is the cryptography library. Every experiment runs in containers, so nothing is installed on the host: a slim runtime image for tests and replay experiments, and a privileged image with bpftrace for live capture.")
+    base.add_body(doc, "B-SCAF is written in Python (3.11 or newer), and its only runtime dependency is the cryptography library. We ran everything in Docker, partly so that nothing had to be installed on the host and partly so that anyone can repeat the experiments with a couple of commands. There is a small image for the tests and the replay experiments, and a privileged image with bpftrace for live capture. The main modules are listed below.")
     table(doc, ["Module", "Responsibility"], [
         ("ebpf.py", "bpftrace program generation, kernel-PID discovery, live capture loop"),
         ("auditd.py", "auditd parsing, record correlation, architecture tables, log following"),
@@ -301,13 +314,14 @@ def build() -> None:
         ("attacks.py, bench.py", "Reusable tampering scenarios and the Phase 6 benchmark"),
         ("cli.py, ui.py", "Command-line interface and local dashboard"),
     ], widths=[2.0, 4.2])
-    base.add_body(doc, "The automated suite has 48 tests: integrity and tampering, real auditd fixtures in every supported format, recorded eBPF output, the CLI including de-duplication and replication on commit, the full attack matrix against HTTP witnesses, witness chain rules, mutual TLS, encrypted keys, search and the benchmark harness.")
+    base.add_body(doc, "There are 48 automated tests. They cover hashing and tampering, real auditd lines in every format we support, recorded eBPF output, the command line (including re-ingesting the same log twice), the full attack matrix against real witness servers, the witness rules, mutual TLS, encrypted keys, search and the benchmark harness.")
 
     base.add_heading(doc, "7. Evaluation", 1)
     base.add_heading(doc, "7.1 Data and Environment", 2)
-    base.add_body(doc, f"Recorded data: {real['dataset']['files']} raw auditd logs ({real['dataset']['bytes']:,} bytes) from Splunk Attack Data at commit {real['dataset']['commit'][:12]}, captured in Splunk Attack Range while executing MITRE ATT&CK techniques, each verified against a pinned SHA-256. Live data: the eBPF collector in a privileged container on the WSL2 kernel {live['kernel']}, observing every process on that kernel while a repeatable workload ran. Environment: {real['environment']['platform']}, Python {real['environment']['python']}.")
+    base.add_body(doc, f"We used two kinds of data. The first is recorded: {real['dataset']['files']} raw auditd logs ({real['dataset']['bytes']:,} bytes) from Splunk's public Attack Data repository, captured in a lab while MITRE ATT&CK techniques were being carried out. We pinned the repository at commit {real['dataset']['commit'][:12]} and check every file against its SHA-256 before using it. The second is live: the eBPF collector running in a privileged container on the WSL2 kernel {live['kernel']}, watching every process on that kernel while a repeatable workload ran. All runs used Python {real['environment']['python']} on {real['environment']['platform']}.")
 
     base.add_heading(doc, "7.2 Recorded Attack Data", 2)
+    base.add_body(doc, f"Our first prototype did badly on this data, which turned out to be a useful lesson. It aborted on 11 of the 100 files, because files exported with ausearch -i use a different timestamp format, and it kept only 46 events because it ignored everything except the SYSCALL record. The data had other surprises too: {everything.get('duplicate_syscall_records', 0)} SYSCALL records appear twice with the same audit ID, and many files list their events newest first. The final adapter copes with all of this. Table 1 and Figure 6 compare the two versions.")
     table(doc, ["Measure", "Earlier prototype", "Final system"], [
         ("Files ingested without aborting", "89 / 100", f"{everything['files']} / {real['dataset']['files']}"),
         ("Events committed (all system calls)", "46", fmt(everything.get("accepted", 0))),
@@ -316,43 +330,48 @@ def build() -> None:
         ("Records rejected", "11 whole files", fmt(sum(everything.get("rejected", {}).values()))),
     ], widths=[2.8, 1.6, 1.8])
     caption(doc, "Table 1. Ingestion of the public auditd dataset.")
-    figure(doc, charts["ingest"], "Ingestion of the 100 public auditd logs: earlier prototype compared with the final system.")
+    figure(doc, charts["ingest"], "Ingesting the 100 public auditd logs: the earlier prototype compared with the final system.")
     figure(doc, charts["dataset_syscalls"], "System calls committed from the public dataset, by policy.", width=5.8)
     labels = {"default policy": "Default policy", "all policy": "All system calls"}
     verify_rows = [(labels.get(name, name), report["verdict"], fmt(report["events_checked"]), fmt(report["checkpoints_checked"])) for name, report in real["verify"].items()]
     table(doc, ["Ledger", "Verdict", "Events", "Blocks"], verify_rows, widths=[2.2, 1.2, 1.2, 1.2])
     proofs_ok = sum(item["valid"] for item in real["proofs"])
-    base.add_body(doc, f"Both ledgers verified as pass, and {proofs_ok} of {len(real['proofs'])} randomly selected inclusion proofs verified offline with only the public key. With three witnesses and quorum two, all witnesses online gave pass, one offline still gave pass with a notice, and two offline gave partial evidence.")
+    base.add_body(doc, f"Both ledgers verified cleanly, and {proofs_ok} of {len(real['proofs'])} randomly chosen proofs checked out using nothing but the public key. With three witnesses and a quorum of two, the verdict stayed \"pass\" when one witness was switched off (with a notice saying so) and became \"partial\" when two were off, which is exactly the behaviour we wanted.")
 
     base.add_heading(doc, "7.3 Live Capture: Completeness and Overhead", 2)
-    base.add_body(doc, f"Each live run executed {live['iterations']:,} iterations of a workload that creates and writes a file, renames it, changes its mode, deletes it, starts /bin/true and opens a TCP connection. Each phase ran {live['runs']} times; medians are reported.")
+    base.add_body(doc, f"For the live experiment we wrote a workload that does the kind of things an intruder might do. In each of {live['iterations']:,} iterations it creates and writes a file, renames it, changes its permissions, deletes it, starts /bin/true and opens a TCP connection. We ran it {live['runs']} times in each of three setups: with no tracing, with the eBPF program attached but its output thrown away, and with full B-SCAF capture sealing 1-second blocks and sending them to three witnesses. The tables report medians.")
     table(doc, ["Phase", "Workload time (s)", "Slowdown", "Collector CPU (s)"], [
         (phase, fmt(row["workload_seconds"], 2), f"{row['slowdown_percent']:+.1f}%", fmt(row["collector_cpu_seconds"], 2)) for phase, row in overview.items()
     ], widths=[2.0, 1.5, 1.2, 1.5])
     caption(doc, "Table 2. Workload slowdown: no tracing, eBPF tracing alone, full B-SCAF capture with witness replication.")
-    figure(doc, charts["live_overhead"], "Live workload time per phase (bars: median of three runs; dots: individual runs).")
+    figure(doc, charts["live_overhead"], "Live workload time per setup (bars: median of three runs; dots: individual runs).")
     table(doc, ["Run", "Events", "Blocks", "Lost", "Commit delay p50/p95 (ms)", "Verdict (local / witnesses)", "Workload calls captured"], [
         (index, fmt(run["events"]), run["blocks"], run["collector"]["lost_events"], f"{run['commit_delay_ms_median']:.0f} / {run['commit_delay_ms_p95']:.0f}",
          f"{run['verify_local']} / {run['verify_witnesses']}", f"{run['completeness']['captured']:,} / {run['completeness']['expected']:,}")
         for index, run in enumerate(live_runs, start=1)
     ])
     caption(doc, "Table 3. Live B-SCAF runs with 1-second blocks replicated to three witnesses.")
-    figure(doc, charts["live_syscalls"], "System calls captured host-wide during one live run (the workload plus all other host activity).", width=5.8)
-    lost_note = "no events were reported lost" if all(run["collector"]["lost_events"] == 0 for run in live_runs) else "the perf buffer reported a small number of lost host events in some runs, none of them belonging to the workload"
-    base.add_body(doc, f"Every workload operation reached the signed ledger in every run, and {lost_note}. The slowdown with full B-SCAF capture is no larger than with tracing alone (the difference is within run-to-run variation on this short workload), so the cost comes from attaching tracepoints to hot system calls such as openat. The user-space work of hashing, signing and replicating runs on another core and used about {overview['B-SCAF']['collector_cpu_seconds']:.1f} CPU-seconds per run. Commit delay is bounded by the 1-second block interval.")
+    figure(doc, charts["live_syscalls"], "System calls captured across the whole host during one live run (the workload plus everything else that was running).", width=5.8)
+    if any(lost):
+        lost_sentence = f"In {sum(1 for value in lost if value)} run(s) the kernel's buffer reported lost events ({max(lost)} at most), but all of them belonged to other processes; none of the workload's operations went missing."
+    else:
+        lost_sentence = "No events were reported lost."
+    base.add_body(doc, f"In every run, every one of the workload's {workload_ops:,} operations ended up in the signed ledger. {lost_sentence}")
+    base.add_body(doc, f"The overhead result surprised us at first: the full B-SCAF runs were not slower than tracing alone ({full_slowdown:+.0f}% against {tracing_slowdown:+.0f}%). On a workload this short, the difference is within normal run-to-run variation. What it tells us is that the cost lies in hooking busy system calls such as openat, not in hashing, signing and replicating, which run on another core and used about {overview['B-SCAF']['collector_cpu_seconds']:.1f} CPU-seconds per run. It is worth stressing that this workload does nothing but system calls, so these figures are close to a worst case; ordinary programs spend most of their time computing. Events were sealed within about a second, as you would expect with 1-second blocks.")
 
     base.add_heading(doc, "7.4 Attack Tests", 2)
+    base.add_body(doc, "We wrote each attack as a small program that damages a copy of the ledger the way a real attacker would, then verified the damaged copy with and without witnesses.")
     table(doc, ["Attack", "Local", "With witnesses", "Detected by"], [
         (row["description"], row["local_verdict"], row["witness_verdict"], row["detected_by"]) for row in real["attacks"]
     ], widths=[3.2, 0.9, 1.2, 0.9])
     caption(doc, "Table 4. Attack matrix on the real-data ledger (identical outcomes on the live ledger).")
-    figure(doc, charts["attacks"], "Attack scenarios: verdict with local verification only and with three witnesses.")
-    base.add_body(doc, "Edits, deletions, insertions, reordering, Merkle-root changes and replayed blocks are caught by local verification. Deleting the newest block and re-signing a rewritten history with the stolen key leave a locally consistent ledger, and only comparison with the witnesses exposes them; the witnesses also refused the rewritten blocks when they were offered. A forged acknowledgement fails its witness signature, and losing the witness quorum yields partial evidence rather than a false pass.")
+    figure(doc, charts["attacks"], "Attack scenarios: the verdict with local checks only and with three witnesses.")
+    base.add_body(doc, "Edits, deletions, insertions, reordering, a changed Merkle root and a replayed block are all caught by the local checks alone. Two attacks are not: deleting the newest block, and re-signing a rewritten history with the stolen key. Both leave a ledger that is perfectly consistent with itself, and only the witnesses' copies give them away. When we tried to push the rewritten blocks to the witnesses, they refused them. A tampered witness receipt fails its signature check, and losing the quorum produces \"partial\", never a false \"pass\".")
 
     if bench:
         base.add_heading(doc, "7.5 Replay Benchmark", 2)
         events = real["bench"]["events"]
-        base.add_body(doc, f"{events:,} events from the dataset were replayed through plain JSON logging, a hash chain alone and B-SCAF, each configuration in its own process.")
+        base.add_body(doc, f"To measure raw speed we replayed {events:,} events from the dataset through three kinds of logging: plain JSON lines with no protection at all, a hash chain on its own, and B-SCAF with different block sizes. Each setup ran in its own process so the measurements did not interfere with each other.")
         table(doc, ["Configuration", "Events/s", "Latency p50/p95 (µs)", "Commit delay p50 (ms)", "Bytes/event", "Full verify (s)"], [
             (label, fmt(row["events_per_second"], 0), f"{row['latency_us_median']:.0f} / {row['latency_us_p95']:.0f}",
              fmt(row["commit_delay_ms_median"], 1), fmt(row["bytes_per_event"], 0), fmt(row.get("verify_seconds"), 2))
@@ -360,14 +379,28 @@ def build() -> None:
         ])
         caption(doc, "Table 5. Throughput, latency, storage and verification on replayed events.")
         figure(doc, charts["throughput"], "Ingest throughput per configuration on one core.")
-        figure(doc, charts["latency"], "Per-event processing latency: median and 95th percentile.")
-        figure(doc, charts["tradeoff"], "Effect of block size on throughput and on the delay until an event is signed.")
-        figure(doc, charts["storage"], "Storage cost per event.")
+        figure(doc, charts["latency"], "Per-event processing time: median and 95th percentile.")
+        figure(doc, charts["tradeoff"], "How block size trades throughput against the delay until an event is sealed.")
+        figure(doc, charts["storage"], "Storage needed per event.")
         n100 = bench.get("B-SCAF N=100")
+        chain = bench.get("hash chain only")
+        durable = bench.get("B-SCAF N=100 + fsync")
         if n100:
-            base.add_body(doc, f"With 100-event blocks B-SCAF sustained {n100['events_per_second']:,.0f} events/s on one core, verified {events:,} events in {n100['verify_seconds']:.1f} s, verified a single proof in {1000 * n100['proof_verify_seconds']:.1f} ms and replicated its blocks to three witnesses in {n100.get('replicate_seconds', 0):.1f} s. Durable commits (fsync per block) reduce throughput, which matters on filesystems with slow flushes such as the WSL2 virtual disk.")
+            share = f", about {100 * n100['events_per_second'] / chain['events_per_second']:.0f}% of what a bare hash chain manages, so the Merkle roots and signatures add surprisingly little" if chain else ""
+            fsync_note = f" Forcing every block to disk with fsync brings throughput down to {durable['events_per_second']:,.0f} events per second, which mostly reflects how slowly the WSL2 virtual disk flushes." if durable else ""
+            base.add_body(doc, f"With 100-event blocks B-SCAF handled {n100['events_per_second']:,.0f} events per second on one core{share}. Verifying all {events:,} events took {n100['verify_seconds']:.1f} s, checking a single proof took {1000 * n100['proof_verify_seconds']:.2f} ms, and sending every block to three witnesses took {n100.get('replicate_seconds', 0):.1f} s.{fsync_note}")
 
-    base.add_heading(doc, "8. Achievement of Objectives", 1)
+    base.add_heading(doc, "8. Problems We Ran Into", 1)
+    base.add_body(doc, "A good part of the project was spent on things that did not work the first time. We think they are worth recording, because each one changed the design.")
+    base.add_bullets(doc, [
+        "Real logs broke the first parser. It had only been tried on a single hand-written line. The public dataset showed it several timestamp formats, events split across records, duplicated records and newest-first ordering.",
+        "Ingestion was far too slow. The first version re-read the whole event file for every new event, so the work grew with the square of the log size, and 100,000 events would never have finished. Keeping the end of the chain in memory fixed it.",
+        "auditd could not be controlled from a Docker Desktop container, so live capture with auditd was impossible in our setup. That is why the eBPF collector exists.",
+        "Process IDs inside a container are not the IDs the kernel sees. This silently broke both the collector's self-filter and our completeness check until we added the kernel-ID probe.",
+        "Flushing to disk on WSL2 costs around 8 ms per call, which dominated early measurements. We made durable writes a setting and report both modes.",
+    ])
+
+    base.add_heading(doc, "9. Achievement of Objectives", 1)
     table(doc, ["Objective", "Status", "Evidence"], [
         ("1. Capture system calls with context", "Achieved", "eBPF live capture with full workload coverage; auditd adapter on 100 real logs"),
         ("2. Immutable lightweight evidence chain", "Achieved", "Hash chain, Merkle batches (N, T, host), Ed25519 blocks, policy version"),
@@ -377,18 +410,19 @@ def build() -> None:
         ("Phase 5: attack tests", "Achieved", f"{attacks_ok}/{len(real['attacks'])} scenarios as designed"),
     ], widths=[2.2, 0.9, 3.1])
 
-    base.add_heading(doc, "9. Limitations and Future Work", 1)
+    base.add_heading(doc, "10. Limitations and Future Work", 1)
+    base.add_body(doc, "B-SCAF has real limits, and it is better to state them plainly:")
     base.add_bullets(doc, [
-        "Capture trust: a compromised kernel or collector can fabricate or drop events before capture; remote attestation or TPM-measured boot would reduce this.",
-        "Key custody: signing keys can be passphrase-encrypted but are still files; a TPM or HSM would prevent key theft, which today is detected only through the witnesses.",
-        "Unprotected window: events are protected once their block is signed and replicated, after at most one block interval (1 s in the live runs).",
-        "Scale: verification holds one hash per event in memory and proof export scans the event file; an indexed store and archival are needed for very large ledgers.",
-        "Environment: live results come from WSL2, where Docker Desktop containers cannot control auditd; an auditd-based live run and bare-metal timings remain to be done.",
-        "Datasets: the public auditd sample is small and mostly exports one record type per file; larger multi-host captures would further test record correlation.",
+        "It trusts the machine at the moment of recording. A compromised kernel or collector can invent or drop events before they are sealed. Remote attestation or measured boot would reduce that trust.",
+        "The signing key is still a file, even if it can be encrypted with a passphrase. A TPM or hardware security module would stop the key from being stolen in the first place; today a stolen key is only caught through the witnesses.",
+        "Events are unprotected for a short time, until their block is sealed and replicated. In the live runs that was about a second.",
+        "The storage is simple. Verification keeps one hash per event in memory and exporting a proof scans the event file, so very large ledgers would need an index and archiving.",
+        "Our live results come from WSL2 on a laptop. An auditd-based live run on a normal Linux machine and timings on bare metal are still to be done.",
+        "The public auditd sample is small and mostly stores one record type per file, so larger multi-host captures would test the record grouping more thoroughly.",
     ])
 
-    base.add_heading(doc, "10. Conclusion", 1)
-    base.add_body(doc, "B-SCAF shows that system-call evidence can be made tamper-evident and independently verifiable with modest overhead and without a public blockchain. Live eBPF capture recorded every operation of a repeatable workload into a signed ledger, recorded attack data from a public dataset was ingested and verified end to end, and every tampering scenario in the brief, plus truncation and re-signing with a stolen key, was detected. The remaining limits concern trust at capture time and key custody, which are hardware and platform questions rather than gaps in the evidence chain.")
+    base.add_heading(doc, "11. Conclusion", 1)
+    base.add_body(doc, "We set out to show that system-call evidence can be protected against a root-level attacker without a public blockchain and at a reasonable cost, and we think the results support that. In live capture every operation of our test workload made it into the signed ledger. The public attack dataset went through the whole pipeline. Every tampering scenario from the brief was caught, and so were deleting the tail and re-signing with a stolen key. What remains is mostly about trust at the edges: whether the machine was honest when it recorded the events, and how well the signing key is protected. Those are questions for hardware and platform design rather than gaps in the evidence chain itself.")
 
     base.add_heading(doc, "Appendix A. Reproducing the Results", 1)
     base.add_body(doc, "From the repository root on any machine with Docker:")
@@ -399,7 +433,7 @@ docker run --rm -v "$PWD":/app -w /app bscaf python scripts/run_real_data.py
 docker build -t bscaf-live -f deploy/live/Dockerfile deploy/live
 docker run --rm --privileged --pid=host -v "$PWD":/app -w /app bscaf-live python scripts/live_capture.py
 """)
-    base.add_body(doc, "The scripts write results/REAL_DATA_REPORT.md and results/LIVE_REPORT.md with the tables used in this report.")
+    base.add_body(doc, "The scripts write results/REAL_DATA_REPORT.md and results/LIVE_REPORT.md, which contain the tables used in this report. On Windows PowerShell, write ${PWD} instead of $PWD.")
 
     base.add_heading(doc, "References", 1)
     for reference in base.extract_references():

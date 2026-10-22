@@ -31,7 +31,10 @@ def find_font(size: int, bold: bool = False):
     for candidate in candidates:
         if candidate.exists():
             return ImageFont.truetype(str(candidate), size=size)
-    return ImageFont.load_default()
+    try:  # Pillow 10.1+ ships a scalable default font
+        return ImageFont.load_default(size=size)
+    except TypeError:
+        return ImageFont.load_default()
 
 
 def center_text(draw, box, text, font, spacing=7):

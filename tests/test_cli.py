@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -14,7 +15,7 @@ SRC = Path(__file__).resolve().parents[1] / "src"
 def bscaf(data_dir: Path, *args: str) -> dict:
     result = subprocess.run(
         [sys.executable, "-m", "bscaf", "--data-dir", str(data_dir), *args],
-        capture_output=True, text=True, env={"PYTHONPATH": str(SRC)}, check=False,
+        capture_output=True, text=True, env={**os.environ, "PYTHONPATH": str(SRC)}, check=False,
     )
     if result.returncode not in (0, 1):
         raise AssertionError(result.stderr)

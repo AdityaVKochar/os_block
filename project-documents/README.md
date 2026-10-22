@@ -4,6 +4,7 @@ This folder contains the written project artifacts and the scripts used to regen
 
 ## Generated documents
 
+- `B-SCAF_Code_Guide_Setup_and_Viva_Preparation.docx` - **companion guide**: pitches, what every code file does and how they work together, setup on any computer, a viva demo, and 139 viva questions with answers (built by `builders/build_viva_guide.py`).
 - `Blockchain_System_Call_Audit_Framework_Final_Report.docx` - **final report**: design, implementation and evaluation (recorded attack data, live eBPF capture, attack tests, benchmarks), generated from the measured results in `data/`.
 - `Blockchain_System_Call_Audit_Framework.docx` - original project brief.
 - `Blockchain_System_Call_Audit_Framework_Formal_Draft.docx` - formal academic draft.

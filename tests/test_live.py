@@ -52,6 +52,7 @@ class EbpfCollectorTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             bpftrace_program(["read"])
 
+    @unittest.skipIf(os.name == "nt", "the stand-in tracer is a POSIX executable script")
     def test_capture_commits_blocks_from_a_tracer_stream(self):
         with tempfile.TemporaryDirectory() as directory:
             fake = Path(directory) / "fake-bpftrace"

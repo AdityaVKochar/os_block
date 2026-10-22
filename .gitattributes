@@ -1,0 +1,5 @@
+# Keep LF endings in every checkout (including Git for Windows) so files behave
+# the same inside the Linux containers.
+* text=auto eol=lf
+*.docx binary
+*.png binary
