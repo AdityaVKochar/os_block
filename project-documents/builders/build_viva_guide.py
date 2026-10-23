@@ -3,7 +3,7 @@
 Uses the same styles as the final report and the same measured results
 (project-documents/data/*.json), so every number quoted here matches the report.
 
-Run from the repository root (python-docx, Pillow and matplotlib required):
+Run from the repository root (python-docx, python-pptx and Pillow required):
   python project-documents/builders/build_viva_guide.py
 """
 
@@ -200,7 +200,7 @@ BUILD_FILES = [
     ("samples/", "Two tiny example inputs: a few JSON events and one auditd line."),
     (".dockerignore, .gitignore, .gitattributes", "Keep generated data out of images and Git, and keep line endings consistent on Windows."),
     ("docs/", "README-level documentation: architecture and demo guide, results snapshot, status against the brief."),
-    ("project-documents/builders/", "Scripts that generate the Word documents, diagrams and charts, including this guide."),
+    ("project-documents/builders/", "Scripts that generate the Word documents, the diagrams and the native Word charts, including this guide."),
     ("project-documents/data/", "Snapshots of the measured results that the report and this guide are generated from."),
 ]
 
@@ -469,7 +469,7 @@ def viva_questions(n: dict) -> list[tuple[str, list[tuple[str, str]]]]:
             ("How reproducible are your results?",
              "Fully scripted: one command per experiment, all in Docker; the dataset is pinned by commit and checksums; the results are saved as JSON; and the report and this guide are generated from those JSON files, so no number is typed by hand."),
             ("What do the charts in your report show?",
-             "Only the three essential results: live workload time for each setup, with every run shown as a dot; a grid of the twelve attacks showing the verdict with and without witnesses; and throughput per configuration compared with plain logging and a hash chain. Everything else is in the report's tables."),
+             "Only the essential results, built as real Word charts rather than pictures: live workload time for each setup, and throughput per configuration compared with plain logging and a hash chain. The twelve attacks are a colour-coded table showing the verdict with and without witnesses. In Word you can click a chart and choose Edit Data to see the exact numbers."),
         ]),
         ("G. Comparison with existing work", [
             ("How is this different from sending logs to a central server or a SIEM?",
@@ -643,7 +643,7 @@ def build() -> None:
         ("5", "How the pieces fit", "Architecture figure (report Figure 1)"),
         ("6", "Why witnesses: the stolen-key attack", "Witness protocol figure (report Figure 4)"),
         ("7", "Results: completeness and overhead", "Live overhead chart and the 100% completeness table"),
-        ("8", "Results: every attack detected", "Attack grid (report Figure 7)"),
+        ("8", "Results: every attack detected", "Colour-coded attack table (report Table 3)"),
         ("9", "Honest limits and future work", "Capture trust, key custody, scale"),
         ("10", "Demo or questions", "bscaf demo, a manual edit, the attack matrix"),
     ], widths=[0.6, 3.0, 2.6])
@@ -816,7 +816,7 @@ bscaf --data-dir demo --batch-size 2 demo
         ("Live-capture experiment (about 2 minutes)", 'docker run --rm --privileged --pid=host -v "$PWD":/app -w /app bscaf-live python scripts/live_capture.py'),
         ("Attack matrix on the recorded-data ledger", 'docker run --rm -v "$PWD":/app -w /app bscaf python scripts/attack_matrix.py --data-dir results/real-data/store-all-syscalls --signer-id dataset-source'),
         ("A shell with the bscaf command", 'docker run --rm -it -v "$PWD":/app -w /app bscaf bash'),
-        ("Rebuild the report and this guide", 'docker run --rm -v "$PWD":/app -w /app bscaf bash -c "pip install --user -q python-docx pillow matplotlib && python project-documents/builders/build_final_report.py && python project-documents/builders/build_viva_guide.py"'),
+        ("Rebuild the report and this guide", 'docker run --rm -v "$PWD":/app -w /app bscaf bash -c "pip install --user -q python-docx python-pptx pillow && python project-documents/builders/build_final_report.py && python project-documents/builders/build_viva_guide.py"'),
     ], widths=[2.0, 4.2])
     for row in commands.rows[1:]:
         for paragraph in row.cells[1].paragraphs:

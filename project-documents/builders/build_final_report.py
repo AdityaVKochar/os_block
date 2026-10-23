@@ -4,7 +4,7 @@ Inputs (snapshots of the evaluation outputs, committed under project-documents/d
   real-data-summary.json  from scripts/run_real_data.py
   live-summary.json       from scripts/live_capture.py
 
-Run from the repository root (python-docx and Pillow required):
+Run from the repository root (python-docx, python-pptx and Pillow required):
   python project-documents/builders/build_final_report.py
 """
 
@@ -127,11 +127,15 @@ def table(doc, headers, rows, widths=None):
         for index, text in enumerate(row):
             base.set_cell_text(cells[index], str(text))
     if widths:
+        # Set both the grid columns and the cells: Word reads the cells, LibreOffice the grid.
+        grid.autofit = False
+        for index, width in enumerate(widths):
+            grid.columns[index].width = Inches(width)
         for row in grid.rows:
             for index, width in enumerate(widths):
                 row.cells[index].width = Inches(width)
-    # Keep a table on one page where it fits; if it must break, repeat the header row
-    # and never split a row, so a header is never stranded at the foot of a page.
+    # Keep a table on one page (with its caption) where it fits; if it must break, repeat
+    # the header row and never split a row, so a header is never stranded at a page foot.
     for position, row in enumerate(grid.rows):
         properties = row._tr.get_or_add_trPr()
         properties.append(base.OxmlElement("w:cantSplit"))
@@ -139,11 +143,13 @@ def table(doc, headers, rows, widths=None):
             header = base.OxmlElement("w:tblHeader")
             header.set(base.qn("w:val"), "true")
             properties.append(header)
-        if position < len(grid.rows) - 1:
-            for cell in row.cells:
-                for paragraph in cell.paragraphs:
-                    paragraph.paragraph_format.keep_with_next = True
-    doc.add_paragraph().paragraph_format.space_after = Pt(2)
+        for cell in row.cells:
+            for paragraph in cell.paragraphs:
+                paragraph.paragraph_format.keep_with_next = True
+    # The spacer also keeps with what follows, so a caption never drifts to the next page.
+    spacer = doc.add_paragraph()
+    spacer.paragraph_format.space_after = Pt(2)
+    spacer.paragraph_format.keep_with_next = True
     return grid
 
 
@@ -151,19 +157,51 @@ FIGURES = {"n": 1}
 
 
 def figure(doc, path, text, width=6.3):
-    """Insert a picture with an automatically numbered caption."""
+    """Insert a picture (diagram) with an automatically numbered caption."""
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p.paragraph_format.keep_with_next = True
     p.add_run().add_picture(str(path), width=Inches(width))
+    figure_caption(doc, text)
+
+
+def figure_caption(doc, text):
+    """Numbered caption for the figure just added (a diagram picture or a native chart)."""
     FIGURES["n"] += 1
     caption(doc, f"Figure {FIGURES['n']}. {text}")
 
 
+VERDICT_CELLS = {  # word shown in the cell, cell fill, white text?
+    "fail": ("Detected", "2A78D6", True),
+    "pass": ("Pass", "EDEDEA", False),
+    "partial": ("Partial", "EB6834", False),
+}
+
+
+def attack_table(doc, attacks):
+    """The attack matrix as a native table: each verdict cell carries its word and a fill colour."""
+    grid = table(doc, ["Attack", "Local checks", "With 3 witnesses", "Outcome"], [
+        (row["description"], VERDICT_CELLS[row["local_verdict"]][0], VERDICT_CELLS[row["witness_verdict"]][0],
+         "as designed" if row["as_expected"] else "UNEXPECTED")
+        for row in attacks
+    ], widths=[3.1, 1.0, 1.2, 0.9])
+    for row, attack in zip(grid.rows[1:], attacks):
+        for column, key in ((1, "local_verdict"), (2, "witness_verdict")):
+            word, fill, white = VERDICT_CELLS[attack[key]]
+            cell = row.cells[column]
+            base.shade_cell(cell, fill)
+            cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            for run in cell.paragraphs[0].runs:
+                run.bold = white
+                if white:
+                    run.font.color.rgb = base.RGBColor(0xFF, 0xFF, 0xFF)
+    return grid
+
+
 def caption(doc, text):
+    """Caption below a figure or table (the figure or table keeps itself with its caption)."""
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p.paragraph_format.keep_with_next = True
     r = p.add_run(text)
     base.set_font(r, 10, italic=True)
 
@@ -193,7 +231,6 @@ def build() -> None:
     real = json.loads((DATA_DIR / "real-data-summary.json").read_text(encoding="utf-8"))
     live = json.loads((DATA_DIR / "live-summary.json").read_text(encoding="utf-8"))
     create_final_diagram()
-    charts = report_charts.build_all(real, live, base.ASSET_DIR / "charts")
     diagrams = report_diagrams.build_all(base.ASSET_DIR / "diagrams")
     FIGURES["n"] = 1
     doc = Document()
@@ -339,7 +376,8 @@ def build() -> None:
 
     base.add_heading(doc, "7.3 Live Capture: Completeness and Overhead", 2)
     base.add_body(doc, f"The workload repeats {live['iterations']:,} times: create and write a file, rename it, chmod it, delete it, run /bin/true and open a TCP connection, i.e. {workload_ops:,} operations per run. We ran it {live['runs']} times each with no tracing, tracing only, and full B-SCAF with 1-second blocks and three witnesses.")
-    figure(doc, charts["live_overhead"], "Live workload time per setup (bars: median; dots: individual runs).")
+    report_charts.live_overhead(doc, live)
+    figure_caption(doc, "Live workload time per setup (median of three runs), as a native Word chart.")
     table(doc, ["Run", "Events", "Blocks", "Lost", "Commit delay p50/p95 (ms)", "Verdict (local / witnesses)", "Workload calls captured"], [
         (index, fmt(run["events"]), run["blocks"], run["collector"]["lost_events"], f"{run['commit_delay_ms_median']:.0f} / {run['commit_delay_ms_p95']:.0f}",
          f"{run['verify_local']} / {run['verify_witnesses']}", f"{run['completeness']['captured']:,} / {run['completeness']['expected']:,}")
@@ -350,20 +388,22 @@ def build() -> None:
     base.add_body(doc, f"Every workload operation reached the signed ledger in every run.{lost_note} Full capture ({full_slowdown:+.0f}%) was no slower than tracing alone ({tracing_slowdown:+.0f}%): the cost is in hooking busy system calls, not in hashing and signing, which used about {overview['B-SCAF']['collector_cpu_seconds']:.1f} CPU-seconds per run on another core. Since the workload is all system calls, this is close to a worst case.")
 
     base.add_heading(doc, "7.4 Attack Tests", 2)
-    base.add_body(doc, f"Each attack damages a copy of the ledger as an attacker would (Figure {FIGURES['n'] + 1}). Edits, deletions, insertions, reordering, a changed root and a replayed block are caught locally. Deleting the newest block and re-signing with a stolen key leave a self-consistent ledger and are caught only by the witnesses, which also refused the rewritten blocks. A forged receipt fails its signature check, and losing the quorum gives partial, never a false pass.")
-    figure(doc, charts["attacks"], "Attack scenarios: the verdict with local checks only and with three witnesses.")
+    base.add_body(doc, "Each attack damages a copy of the ledger as an attacker would (Table 3). Edits, deletions, insertions, reordering, a changed root and a replayed block are caught locally. Deleting the newest block and re-signing with a stolen key leave a self-consistent ledger and are caught only by the witnesses, which also refused the rewritten blocks. A forged receipt fails its signature check, and losing the quorum gives partial, never a false pass.")
+    attack_table(doc, real["attacks"])
+    caption(doc, "Table 3. Attack scenarios: the verdict with local checks only and with three witnesses.")
 
     if bench:
         base.add_heading(doc, "7.5 Replay Benchmark", 2)
         events = real["bench"]["events"]
         base.add_body(doc, f"We replayed {events:,} dataset events through plain logging, a hash chain alone and B-SCAF, each in its own process.")
-        figure(doc, charts["throughput"], "Ingest throughput per configuration on one core.")
+        report_charts.throughput(doc, real)
+        figure_caption(doc, "Ingest throughput per configuration on one core, as a native Word chart.")
         table(doc, ["Configuration", "Events/s", "Latency p50/p95 (µs)", "Bytes/event", "Full verify (s)"], [
-            (label, fmt(row["events_per_second"], 0), f"{row['latency_us_median']:.0f} / {row['latency_us_p95']:.0f}",
+            (report_charts.LABELS.get(label, label), fmt(row["events_per_second"], 0), f"{row['latency_us_median']:.0f} / {row['latency_us_p95']:.0f}",
              fmt(row["bytes_per_event"], 0), fmt(row.get("verify_seconds"), 2))
             for label, row in bench.items()
-        ])
-        caption(doc, "Table 3. Throughput, latency, storage and verification on replayed events.")
+        ], widths=[2.0, 1.0, 1.3, 1.0, 0.9])
+        caption(doc, "Table 4. Throughput, latency, storage and verification on replayed events.")
         n100 = bench.get("B-SCAF N=100")
         chain = bench.get("hash chain only")
         durable = bench.get("B-SCAF N=100 + fsync")

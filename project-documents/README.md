@@ -21,14 +21,14 @@ Run a builder from the repository root, for example:
 python .\project-documents\builders\build_formal_draft.py
 ```
 
-The final report needs `python-docx` and `Pillow` (`pip install -e .[docs]`). To build it in the project container with the Windows fonts used for the diagram:
+The final report needs `python-docx`, `python-pptx` (for its native, editable Word charts) and `Pillow` (`pip install -e .[docs]`). To build it in the project container with the Windows fonts used for the diagram:
 
 ```bash
-sudo docker run --rm -v "$PWD":/app -v /mnt/c/Windows/Fonts:/fonts:ro -w /app bscaf bash -c "pip install --user -q python-docx pillow matplotlib && python project-documents/builders/build_final_report.py"
+sudo docker run --rm -v "$PWD":/app -v /mnt/c/Windows/Fonts:/fonts:ro -w /app bscaf bash -c "pip install --user -q python-docx python-pptx pillow && python project-documents/builders/build_final_report.py"
 ```
 
 `data/real-data-summary.json` and `data/live-summary.json` are snapshots of the outputs of `scripts/run_real_data.py` and `scripts/live_capture.py`. Copy fresh outputs from `results/` to update the report.
 
-Supporting diagram files are stored under `assets/`. The final-report builder draws `bscaf-final-architecture.png`, the project diagrams in `assets/diagrams/` (`report_diagrams.py`: evidence structure, witness protocol sequence, live deployment, verification flow) and the result charts in `assets/charts/` (`report_charts.py`, matplotlib; needs `pip install matplotlib`). Temporary rendering output belongs under `render-output/` and is excluded from Git.
+Supporting diagram files are stored under `assets/`. The final-report builder draws `bscaf-final-architecture.png`, the project diagrams in `assets/diagrams/` (`report_diagrams.py`: evidence structure, witness protocol sequence, live deployment, verification flow) while the result charts are native Word charts with embedded data, built by `report_charts.py` (no chart images). Temporary rendering output belongs under `render-output/` and is excluded from Git.
 
 The `archive/` directory preserves the earlier binary copies that were previously stored at the repository root. `archive/original-brief/` contains the exact original brief, while `archive/pre-reorganization/` contains the earlier formal draft and native-shape diagram. They are retained only for comparison and recovery; the current generated documents are the files at the top of `project-documents/`.
