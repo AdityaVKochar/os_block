@@ -154,6 +154,37 @@ def table(doc, headers, rows, widths=None):
 
 
 FIGURES = {"n": 1}
+GITHUB_URL = "https://github.com/AdityaVKochar/os_block"
+
+
+def github_banner(doc, size=20, space_before=60):
+    """The project's GitHub link, large and clickable, for a title page."""
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.paragraph_format.space_before = Pt(space_before)
+    base.set_font(p.add_run("Source code, data and reproduction scripts"), 12, bold=True)
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    rel_id = p.part.relate_to(GITHUB_URL, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink", is_external=True)
+    link = base.OxmlElement("w:hyperlink")
+    link.set(base.qn("r:id"), rel_id)
+    run = base.OxmlElement("w:r")
+    props = base.OxmlElement("w:rPr")
+    fonts = base.OxmlElement("w:rFonts")
+    fonts.set(base.qn("w:ascii"), "Times New Roman")
+    fonts.set(base.qn("w:hAnsi"), "Times New Roman")
+    props.append(fonts)
+    for tag, value in (("w:b", None), ("w:color", "1C5CAB"), ("w:u", "single"), ("w:sz", str(size * 2))):
+        element = base.OxmlElement(tag)
+        if value is not None:
+            element.set(base.qn("w:val"), value)
+        props.append(element)
+    run.append(props)
+    text = base.OxmlElement("w:t")
+    text.text = GITHUB_URL
+    run.append(text)
+    link.append(run)
+    p._p.append(link)
 
 
 def figure(doc, path, text, width=6.3):
@@ -262,9 +293,10 @@ def build() -> None:
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p.paragraph_format.space_before = Pt(40)
     base.set_font(p.add_run("Final Project Report: Design, Implementation and Evaluation"), 12, italic=True)
+    github_banner(doc)
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p.paragraph_format.space_before = Pt(150)
+    p.paragraph_format.space_before = Pt(90)
     base.set_font(p.add_run("Operating Systems and Cybersecurity Project"), 11)
     p.add_run().add_break(WD_BREAK.PAGE)
 

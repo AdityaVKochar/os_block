@@ -24,7 +24,7 @@ import report_diagrams  # noqa: E402
 
 DATA_DIR = base.DOCUMENTS_DIR / "data"
 OUTPUT = base.DOCUMENTS_DIR / "B-SCAF_Code_Guide_Setup_and_Viva_Preparation.docx"
-REPO = "https://github.com/AdityaVKochar/os_block.git"
+REPO = report.GITHUB_URL + ".git"
 
 FIGURE = {"n": 0}
 
@@ -603,9 +603,10 @@ def build() -> None:
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p.paragraph_format.space_before = Pt(30)
     base.set_font(p.add_run("Companion to the final report on the Blockchain-Based System Call Audit Framework"), 12, italic=True)
+    report.github_banner(doc, size=18)
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p.paragraph_format.space_before = Pt(150)
+    p.paragraph_format.space_before = Pt(90)
     base.set_font(p.add_run("Operating Systems and Cybersecurity Project"), 11)
     p.add_run().add_break(WD_BREAK.PAGE)
 
@@ -752,7 +753,7 @@ def build() -> None:
         "About 2 GB of free disk space and an internet connection for the first build and the dataset download.",
         "For live capture only: a Linux kernel with eBPF support. It was tested on WSL2 through Docker Desktop; it should work on a normal Linux machine; on macOS it is untested.",
     ])
-    base.add_body(doc, f"The code is on GitHub at {REPO} (branch master). The repository is private, so the first time git asks, sign in with a GitHub account that has access: on Windows and macOS a browser window opens; on Linux, run gh auth login first or use a personal access token as the password. Anyone else needs to be added as a collaborator on GitHub, or you can simply give them a copy of the project folder, for example as a ZIP file, and skip the git clone step.")
+    base.add_body(doc, f"The code is on GitHub at {REPO} (branch master). The repository is public, so anyone can clone it without signing in, or download it as a ZIP from the GitHub page (Code, then Download ZIP).")
 
     base.add_heading(doc, "5.2 Windows (PowerShell)", 2)
     base.add_bullets(doc, [
